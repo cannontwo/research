@@ -1,0 +1,26 @@
+agent:
+  discount_factor: 0.95
+  states_periodic:
+    - false
+    - false
+  alpha: 10000 
+  forgetting_factor: 1.0
+  controller_learning_rate: 1.0
+  use_tanh: false
+  use_clipping: true
+  use_line_search: true
+  clip_line_search: false
+  use_adam: true
+
+experiment:
+  exp_id: refcolexps_r10c10_1
+  training_iterations: 10000
+  update_interval: 1
+  test_interval: 10
+  num_timesteps: 200
+  num_tests: 10
+  env_name: "Holonomic Car"
+  use_grid_refs: true
+  ref_rows: 10
+  ref_cols: 10
+  random_refs: 100
