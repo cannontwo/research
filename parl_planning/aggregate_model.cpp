@@ -4,11 +4,15 @@ using namespace cannon::research::parl;
 
 void AggregateModel::add_local_model(const RLSFilter& model, const VectorXd&
     ref_state, const VectorXd& next_ref_state, const VectorXd& ref_control,
-    double tau) {
+    double tau, double tau_delta) {
+  
   assert(ref_state.size() == state_dim_);
   assert(next_ref_state.size() == state_dim_);
   assert(ref_control.size() == action_dim_);
   assert(tau >= 0.0);
+  assert(tau <= 1.0);
+  assert(tau_delta >= 0.0);
+  assert(tau_delta <= 1.0);
 
   MatrixXd theta = model.get_identified_mats().first;
   assert(theta.rows() == state_dim_);
@@ -21,17 +25,17 @@ void AggregateModel::add_local_model(const RLSFilter& model, const VectorXd&
   MatrixXd B_hat = theta.rightCols(action_dim_);
 
   // See https://www.overleaf.com/project/5fff4fe3176331cc9ab8472d
-  MatrixXd I(state_dim_, state_dim_);
-  VectorXd c_est = (I - A_hat) * ref_state;
-  c_est += (((tau + time_delta_) * I) - (tau * A_hat)) * next_ref_state;
-  c_est += (B_hat * ref_control) - c_hat;
+  // TODO Fix once math for interpolation is fixed
+  VectorXd interp_state = ref_state + tau * (next_ref_state - ref_state);
+  VectorXd next_interp_state = interp_state + tau_delta * (next_ref_state - ref_state);
+  VectorXd c_est = next_interp_state - (A_hat * interp_state) - (B_hat * ref_control) - c_hat;
 
   LinearParams tmp_param(A_hat, -B_hat, c_est, model.get_num_data());
 
   VectorXu grid_coords = get_grid_coords(ref_state);
   auto iter = parameters_.find(grid_coords);
   if (iter != parameters_.end()) {
-    // There is no current LinearParams object for grid_coords
+    // There is no existing LinearParams object for grid_coords
     parameters_.insert({grid_coords, tmp_param});
   } else {
     // There is already a LinearParams, so we merge

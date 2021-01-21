@@ -117,8 +117,11 @@ namespace cannon {
             }
           }
 
-          void add_local_model(const RLSFilter& model, const VectorXd& ref_state, 
-              const VectorXd& next_ref_state, const VectorXd& ref_control, double tau);
+          void add_local_model(const RLSFilter& model, const VectorXd&
+              ref_state, const VectorXd& next_ref_state, 
+              const VectorXd& ref_control, double tau, double tau_delta);
+
+          // TODO Write function to take an entire PARL agent and path
 
           // TODO Write function to use this model for planning, in combination with nominal model
 
