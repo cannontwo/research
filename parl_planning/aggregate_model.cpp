@@ -25,7 +25,6 @@ void AggregateModel::add_local_model(const RLSFilter& model, const VectorXd&
   MatrixXd B_hat = theta.rightCols(action_dim_);
 
   // See https://www.overleaf.com/project/5fff4fe3176331cc9ab8472d
-  // TODO Fix once math for interpolation is fixed
   VectorXd interp_state = ref_state + tau * (next_ref_state - ref_state);
   VectorXd next_interp_state = interp_state + tau_delta * (next_ref_state - ref_state);
   VectorXd c_est = next_interp_state - (A_hat * interp_state) - (B_hat * ref_control) - c_hat;
@@ -41,7 +40,22 @@ void AggregateModel::add_local_model(const RLSFilter& model, const VectorXd&
     // There is already a LinearParams, so we merge
     iter->second.merge(tmp_param);
   }
-  
+}
+
+void AggregateModel::process_path_parl(std::shared_ptr<Environment> env,
+    std::shared_ptr<Parl> model, oc::PathControl& path) {
+
+  std::vector<ob::State*> states = path.getStates();
+  std::vector<oc::Control*> controls = path.getControls();
+  std::vector<double> durations = path.getControlDurations();
+
+  for (unsigned int i = 0; i < controls.size(); i++) {
+    VectorXd c = get_control_from_ompl_control(env, controls[i]);
+    
+    // TODO Finding appropriate waypoints, locating local parl model, computing tau/tau_delta
+    //add_local_model(local_model, waypoint, next_waypoint, c, tau, tau_delta);
+  }
+
 }
 
 VectorXu AggregateModel::get_grid_coords(const VectorXd& query) const {
@@ -59,6 +73,7 @@ VectorXu AggregateModel::get_grid_coords(const VectorXd& query) const {
   return coords; 
 }
 
+// Free Functions
 bool cannon::research::parl::vector_comp(const VectorXu& v1, const VectorXu& v2) {
   assert(v1.size() == v2.size());
 

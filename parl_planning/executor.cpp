@@ -41,8 +41,8 @@ void Executor::execute_path(oc::PathControl& path) {
 
   double accumulated_dur = 0.0;
   for (unsigned int i = 0; i < controls.size(); i++) {
-    VectorXd s = get_coords_from_ompl_state(states[i]);
-    VectorXd next_s = get_coords_from_ompl_state(states[i+1]);
+    VectorXd s = get_coords_from_ompl_state(env_, states[i]);
+    VectorXd next_s = get_coords_from_ompl_state(env_, states[i+1]);
 
     // Break path tracking if state error greater than threshold
     double path_error = (s - env_->get_state()).norm();
@@ -57,9 +57,7 @@ void Executor::execute_path(oc::PathControl& path) {
       return;
     }
 
-    Vector2d c;
-    c[0] = controls[i]->as<oc::RealVectorControlSpace::ControlType>()->values[0];
-    c[1] = controls[i]->as<oc::RealVectorControlSpace::ControlType>()->values[1];
+    Vector2d c = get_control_from_ompl_control(env_, controls[i]);
 
     unsigned int duration_millis = std::floor(durations[i] * 1000);
     std::chrono::milliseconds control_dur(duration_millis);
@@ -115,16 +113,7 @@ void Executor::execute_control_for_duration(const VectorXd& s, const VectorXd& n
 
 }
 
-VectorXd Executor::get_coords_from_ompl_state(ob::State* s) {
-  std::vector<double> coord_vec;
-
-  env_->get_state_space()->copyToReals(coord_vec, s);
-
-  VectorXd ret_vec(coord_vec.size());
-  ret_vec = Map<VectorXd, Unaligned>(coord_vec.data(), coord_vec.size());
-
-  return ret_vec;
-}
+// Free Functions
 
 void cannon::research::parl::noop_post_integration(const ob::State*, const oc::Control*, 
     const double, ob::State*) {

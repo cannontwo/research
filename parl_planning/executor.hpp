@@ -6,6 +6,7 @@
 
 #include <cannon/research/parl/environment.hpp>
 #include <cannon/research/parl_planning/parl_planner.hpp>
+#include <cannon/research/parl_planning/ompl_utils.hpp>
 
 namespace cannon {
   namespace research {
@@ -36,10 +37,9 @@ namespace cannon {
           std::shared_ptr<Environment> env_;
           std::shared_ptr<ParlPlanner> planner_;
           VectorXd goal_;
-
-          VectorXd get_coords_from_ompl_state(ob::State*);
         
       };
+
 
     } // namespace parl
   } // namespace research

@@ -5,8 +5,11 @@
 #include <cassert>
 
 #include <Eigen/Dense>
+#include <ompl/control/PathControl.h>
 
 #include <cannon/ml/rls.hpp>
+#include <cannon/research/parl/parl.hpp>
+#include <cannon/research/parl_planning/ompl_utils.hpp>
 
 using namespace Eigen;
 
@@ -121,7 +124,8 @@ namespace cannon {
               ref_state, const VectorXd& next_ref_state, 
               const VectorXd& ref_control, double tau, double tau_delta);
 
-          // TODO Write function to take an entire PARL agent and path
+          void process_path_parl(std::shared_ptr<Environment> env,
+              std::shared_ptr<Parl> model, oc::PathControl& path);
 
           // TODO Write function to use this model for planning, in combination with nominal model
 
