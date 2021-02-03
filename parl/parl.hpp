@@ -17,6 +17,7 @@
 #include <cannon/ml/piecewise_lstd.hpp>
 #include <cannon/ml/rls.hpp>
 #include <cannon/research/parl/hyperparams.hpp>
+#include <cannon/research/parl/linear_params.hpp>
 #include <cannon/math/multivariate_normal.hpp>
 
 
@@ -95,6 +96,9 @@ namespace cannon {
 
           void reset_value_model();
           void save();
+
+          MatrixXd get_refs();
+          std::vector<AutonomousLinearParams> get_controlled_system();
 
         private:
           VectorXd make_combined_vec_(const VectorXd& state, const VectorXd& action);

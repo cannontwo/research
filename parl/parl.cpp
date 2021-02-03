@@ -198,6 +198,28 @@ void Parl::save() {
   // TODO
 }
 
+MatrixXd Parl::get_refs() {
+  return refs_;
+}
+
+std::vector<AutonomousLinearParams> Parl::get_controlled_system() {
+  std::vector<AutonomousLinearParams> ret_vec;
+
+  for (unsigned int i = 0; i < num_refs_; i++) {
+    MatrixXd K;
+    VectorXd k;
+    std::tie(k, K) = controllers_[i].get_mats();
+    VectorXd c = dynamics_models_[i].get_identified_mats().second;
+
+    MatrixXd controlled_A = get_A_matrix_idx_(i) + (get_B_matrix_idx_(i) * K);
+    VectorXd controlled_c = (get_B_matrix_idx_(i) * k) + c;
+    ret_vec.push_back(AutonomousLinearParams(controlled_A, controlled_c,
+          dynamics_models_[i].get_num_data()));
+  }
+
+  return ret_vec;
+}
+
 // Private methods
 VectorXd Parl::make_combined_vec_(const VectorXd& state, const VectorXd& action) {
   check_state_dim_(state);
