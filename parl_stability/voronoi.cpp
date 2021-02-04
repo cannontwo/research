@@ -20,6 +20,8 @@ VD cannon::research::parl::compute_voronoi_diagram(std::shared_ptr<Parl> parl) {
     log_info("Processing point", i, "/", refs.cols(), "into Voronoi diagram");
   }
 
+  // TODO Also add bounds on state space to Voronoi diagram
+
   assert(diagram.is_valid());
 
   return diagram;

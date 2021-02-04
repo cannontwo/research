@@ -7,6 +7,7 @@
 #include <cannon/research/parl/runner.hpp>
 #include <cannon/research/parl/envs/inverted_pendulum.hpp>
 #include <cannon/research/parl_stability/voronoi.hpp>
+#include <cannon/research/parl_stability/transition_map.hpp>
 
 using namespace cannon::research::parl;
 
@@ -26,7 +27,8 @@ int main() {
   // Compute polytopal representation of Voronoi diagram of PARL refs
   auto diagram = compute_voronoi_diagram(r.get_agent());
 
-  // TODO Create transition map using CGAL polygon affine mapping
+  // Create transition map using CGAL polygon affine mapping
+  auto transition_map = compute_transition_map(r.get_agent(), diagram);
 
   // TODO Formulate and solve iterative LP giving Lyapunov function
   // (https://ieeexplore.ieee.org/document/6426761)

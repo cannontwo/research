@@ -7,6 +7,7 @@ list(APPEND RESEARCH_SOURCES
   parl_planning/aggregate_model.cpp
   parl_planning/ompl_utils.cpp
   parl_stability/voronoi.cpp
+  parl_stability/transition_map.cpp
   )
 
 add_library(research OBJECT ${RESEARCH_SOURCES})
