@@ -17,8 +17,12 @@ namespace cannon {
   namespace research {
     namespace parl {
 
-      std::map<std::pair<unsigned int, unsigned int>, Polygon_2>
-        compute_transition_map(std::shared_ptr<Parl> parl, VD diagram);
+      // Used to convert otherwise infinite rays into long segments
+      const static int RAY_LENGTH = 1000;
+
+      std::map<std::pair<unsigned int, unsigned int>,
+        Polygon_2> compute_transition_map(std::shared_ptr<Parl> parl, VD
+            diagram);
 
       std::map<unsigned int, Polygon_2> create_bounded_voronoi_polygons(std::shared_ptr<Parl> parl, VD diagram);
 

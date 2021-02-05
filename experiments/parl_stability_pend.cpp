@@ -8,8 +8,12 @@
 #include <cannon/research/parl/envs/inverted_pendulum.hpp>
 #include <cannon/research/parl_stability/voronoi.hpp>
 #include <cannon/research/parl_stability/transition_map.hpp>
+#include <cannon/plot/plotter.hpp>
+#include <cannon/graphics/random_color.hpp>
 
 using namespace cannon::research::parl;
+using namespace cannon::plot;
+using namespace cannon::graphics;
 
 int main() {
   Hyperparams params;
@@ -29,6 +33,12 @@ int main() {
 
   // Create transition map using CGAL polygon affine mapping
   auto transition_map = compute_transition_map(r.get_agent(), diagram);
+
+  Plotter p;
+  for (auto const& pair : transition_map) {
+    p.plot_polygon(pair.second, generate_random_color());
+  }
+  p.render();
 
   // TODO Formulate and solve iterative LP giving Lyapunov function
   // (https://ieeexplore.ieee.org/document/6426761)

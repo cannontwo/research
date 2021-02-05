@@ -85,7 +85,10 @@ std::map<unsigned int, Polygon_2> cannon::research::parl::create_bounded_voronoi
 
         ret_map.insert(std::make_pair(i, polygon));
       }
-      // TODO Add else case, simply intersect unbounded polygon with bounding rectangle
+      // TODO Add else case, intersect unbounded polygon with bounding
+      // rectangle. Turns out that this is nontrivial, and for the inverted
+      // pendulum we would only be bounding the velocity dimension. For now I'm
+      // not going to worry about it
     } else {
       throw std::runtime_error("Ref point query did not result in Voronoi face.");
     }

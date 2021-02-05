@@ -15,6 +15,9 @@
 #include <cannon/research/parl/environment.hpp>
 #include <cannon/log/registry.hpp>
 #include <cannon/math/multivariate_normal.hpp>
+#include <cannon/research/parl_stability/voronoi.hpp>
+#include <cannon/research/parl_stability/transition_map.hpp>
+#include <cannon/graphics/random_color.hpp>
 
 # ifdef CANNON_BUILD_GRAPHICS
   #include <cannon/plot/plotter.hpp>
