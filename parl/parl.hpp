@@ -98,6 +98,10 @@ namespace cannon {
           void save();
 
           MatrixXd get_refs();
+          MatrixXd get_B_matrix_idx_(int idx);
+          MatrixXd get_A_matrix_idx_(int idx);
+          MatrixXd get_K_matrix_idx_(int idx);
+          VectorXd get_k_vector_idx_(int idx);
           std::vector<AutonomousLinearParams> get_controlled_system();
 
         private:
@@ -109,8 +113,6 @@ namespace cannon {
 
           VectorXd get_V_matrix_(const VectorXd& state);
           MatrixXd get_B_matrix_(const VectorXd& state);
-          MatrixXd get_B_matrix_idx_(int idx);
-          MatrixXd get_A_matrix_idx_(int idx);
           MatrixXd get_pred_covar_(const VectorXd& state);
 
           inline void check_state_dim_(const VectorXd& state) const;

@@ -34,6 +34,8 @@ int main() {
   // Create transition map using CGAL polygon affine mapping
   auto transition_map = compute_transition_map(r.get_agent(), diagram);
 
+  // TODO Correct for regions of constant control due to limits
+
   Plotter p;
   for (auto const& pair : transition_map) {
     p.plot_polygon(pair.second, generate_random_color());

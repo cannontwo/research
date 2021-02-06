@@ -282,6 +282,20 @@ MatrixXd Parl::get_A_matrix_idx_(int idx) {
   return theta.leftCols(state_dim_);
 }
 
+MatrixXd Parl::get_K_matrix_idx_(int idx) {
+  if (idx >= num_refs_)
+    throw std::runtime_error("Ref point index too large");
+
+  return controllers_[idx].get_mats().second;
+}
+
+VectorXd Parl::get_k_vector_idx_(int idx) {
+  if (idx >= num_refs_)
+    throw std::runtime_error("Ref point index too large");
+
+  return controllers_[idx].get_mats().first;
+}
+
 MatrixXd Parl::get_pred_covar_(const VectorXd& state) {
   check_state_dim_(state);
 

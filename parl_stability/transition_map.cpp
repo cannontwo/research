@@ -8,6 +8,26 @@ std::map<std::pair<unsigned int, unsigned int>, Polygon_2>
   auto voronoi_polygons = create_bounded_voronoi_polygons(parl, diagram);
   log_info("Voronoi diagram has", voronoi_polygons.size(), "bounded polygons");
 
+  unsigned int sat_regions = 0;
+  for (auto& pair : voronoi_polygons) {
+    log_info("Checking saturation of region", pair.first);
+
+    Polygon_2 new_linear_poly, min_sat_poly, max_sat_poly;
+
+    std::tie(new_linear_poly, min_sat_poly, max_sat_poly) =
+      get_saturated_polygons(pair.second, parl->get_K_matrix_idx_(pair.first),
+          parl->get_k_vector_idx_(pair.first)[0]);
+
+
+    if (min_sat_poly.size() != 0 || max_sat_poly.size() != 0) {
+      // TODO Adjust Voronoi polygon collection
+      
+      sat_regions += 1;
+    }
+  }
+
+  log_info(sat_regions, "Voronoi cells exhibited controller saturation");
+
   auto dynamics = parl->get_controlled_system();
  
   // Compute transition map
@@ -107,4 +127,119 @@ std::pair<Polygon_2, Transformation> cannon::research::parl::affine_map_polygon(
   auto ret_poly = CGAL::transform(aff_trans, p);
 
   return std::make_pair(ret_poly, aff_trans.inverse());
+}
+
+std::tuple<Polygon_2, Polygon_2, Polygon_2>
+cannon::research::parl::get_saturated_polygons(const Polygon_2&
+    voronoi_polygon, const RowVector2d& K, double k, double lower, double upper) {
+
+  if (K[0] == 0 && K[1] == 0) {
+    // Line is degenerate, and likely controller hasn't been updated at all
+    Polygon_2 ret_poly;
+    return std::make_tuple(ret_poly, ret_poly, ret_poly);
+  }
+
+  assert(voronoi_polygon.is_simple());
+  std::vector<Extended_kernel::Standard_point_2> vor_pts;
+  for (auto& pt : voronoi_polygon) {
+    vor_pts.push_back(Extended_kernel::Standard_point_2(pt.x(), pt.y()));
+  }
+
+  Nef_polyhedron voronoi_nef_poly(vor_pts.begin(), vor_pts.end());
+  //log_info("Voronoi nef poly is", voronoi_nef_poly);
+
+  // Upper
+  Nef_polyhedron::Line upper_line(K[0], K[1], k - upper); // K * x + k>= upper
+  Nef_polyhedron upper_poly(upper_line, Nef_polyhedron::INCLUDED);
+  Nef_polyhedron upper_intersection = upper_poly.intersection(voronoi_nef_poly);
+  Polygon_2 upper_intersection_poly;
+  if (!upper_intersection.is_empty()) {
+    log_info("Found nonempty upper saturated region");
+    Nef_polyhedron::Explorer e = upper_intersection.explorer();
+    upper_intersection_poly = extract_finite_face_polygon(e);
+  }
+  
+  // Lower
+  Nef_polyhedron::Line lower_line(-K[0], -K[1], lower - k); // K * x + k <= lower, reoriented
+  Nef_polyhedron lower_poly(lower_line, Nef_polyhedron::INCLUDED);
+  Nef_polyhedron lower_intersection = lower_poly.intersection(voronoi_nef_poly);
+  Polygon_2 lower_intersection_poly;
+  if (!lower_intersection.is_empty()) {
+    log_info("Found nonempty lower saturated region");
+    Nef_polyhedron::Explorer e = lower_intersection.explorer();
+    lower_intersection_poly = extract_finite_face_polygon(e);
+  }
+
+  Polygon_2 diff_poly;
+  if (!upper_intersection.is_empty() || !lower_intersection.is_empty()) {
+    Nef_polyhedron tmp_diff = voronoi_nef_poly.difference(upper_intersection);
+    Nef_polyhedron diff = tmp_diff.difference(lower_intersection);
+
+    if (!diff.is_empty()) {
+      Nef_polyhedron::Explorer e = diff.explorer();
+      diff_poly = extract_finite_face_polygon(e);
+    }
+  }
+  
+  return std::make_tuple(diff_poly, lower_intersection_poly, upper_intersection_poly);
+}
+
+
+Polygon_2 cannon::research::parl::extract_finite_face_polygon(const Nef_polyhedron::Explorer& e) {
+  Polygon_2 ret_poly;
+  
+  for (auto fit = e.faces_begin(); fit != e.faces_end(); fit++) {
+    auto hafc = e.face_cycle(fit);
+
+    if (hafc == Halfedge_around_face_const_circulator()) {
+      //log_info("Face has no outer face cycle, skipping.");
+      continue;
+    }
+
+    Halfedge_around_face_const_circulator done(hafc); // Circulator start
+    bool found_infinite = false;
+    do {
+      if (e.is_frame_edge(hafc)) {
+        //log_info("Found frame edge, skipping");
+        found_infinite = true;
+        break;
+      }
+
+      hafc++;
+    } while (hafc != done);
+
+    if (!found_infinite) {
+      // This could be the finite face we're looking for
+      Hole_const_iterator hit = e.holes_begin(fit), end = e.holes_end(fit); 
+      assert(hit == end); // We should not have any holes for Voronoi regions under affine maps
+
+      // Loop back over halfedges and construct polygon
+      log_info("Constructing polygon:");
+      do {
+        Vertex_const_handle vh = e.target(hafc);
+        if (e.is_standard(vh))
+          log_info("\t Point:", e.point(vh));
+        else
+          log_info("\t Ray: ", e.ray(vh));
+        // If this face contains extended points (rays) then it's not the face
+        // we're looking for
+        if (!e.is_standard(vh)) {
+          //log_info("Face has a non-standard vertex, skipping");
+          found_infinite = true;
+          ret_poly = Polygon_2();
+          break;
+        }
+
+        ret_poly.push_back(K::Point_2(e.point(vh).x(), e.point(vh).y()));
+
+        hafc++;
+      } while (hafc != done);
+      
+      if (!found_infinite) {
+        return ret_poly; 
+      }
+    }
+  }
+
+  throw std::runtime_error("Did not find finite face in nef_polyhedron explorer");
 }
