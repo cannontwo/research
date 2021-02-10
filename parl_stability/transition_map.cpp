@@ -8,9 +8,7 @@ std::map<std::pair<unsigned int, unsigned int>, Polygon_2>
   auto voronoi_polygons = create_bounded_voronoi_polygons(parl, diagram);
   log_info("Voronoi diagram has", voronoi_polygons.size(), "bounded polygons");
 
-
   std::map<unsigned int, std::tuple<Polygon_2, Polygon_2, Polygon_2>> sat_voronoi_polygons;
-  unsigned int sat_regions = 0;
   for (auto& pair : voronoi_polygons) {
     log_info("Checking saturation of region", pair.first);
 
@@ -54,8 +52,6 @@ std::map<std::pair<unsigned int, unsigned int>, Polygon_2>
         if (original_set.size() != 0) {
           premap_polys.push_back(original_set);
         }
-        
-        sat_regions += 1;
       }
 
       if (max_sat_poly.size() != 0) {
@@ -66,8 +62,6 @@ std::map<std::pair<unsigned int, unsigned int>, Polygon_2>
         if (original_set.size() != 0) {
           premap_polys.push_back(original_set);
         }
-        
-        sat_regions += 1;
       }
 
       if (linear_poly.size() != 0) {
@@ -87,13 +81,11 @@ std::map<std::pair<unsigned int, unsigned int>, Polygon_2>
 
           // TODO Compute union over premap_polys 
           // premap_polys either has size 2 or 3, via if statements above
-          bool overlap = CGAL::join(premap_polys[0], premap_polys[1], tmp_union);
-          log_info("Premap poly overlap between 0 and 1:", overlap);
+          CGAL::join(premap_polys[0], premap_polys[1], tmp_union);
 
           if (premap_polys.size() == 3) {
             Polygon_with_holes_2 tmp_union_2(tmp_union);
-            overlap = CGAL::join(tmp_union_2, premap_polys[2], tmp_union);
-            log_info("Premap poly overlap between 0+1 and 2:", overlap);
+            CGAL::join(tmp_union_2, premap_polys[2], tmp_union);
           }
 
           // Since the map is continuous within each Voronoi region, there should
@@ -107,10 +99,98 @@ std::map<std::pair<unsigned int, unsigned int>, Polygon_2>
     } // for (pair2)
   } // for (pair)
 
-  log_info(sat_regions, "Voronoi cells exhibited controller saturation");
-  log_info("Computed transition map with", transition_map.size(), "elements");
+  // TODO May want to also return the *true* piecewise affine system: a mapping
+  // between arbitrary indices and pairs of polygons and affine dynamics.
+  //
+  // TODO Alternatively, could split this function in two: one to process the
+  // initial voronoi diagram and compute the "real" piecewise affine system
+  // that takes into account controller saturation, then a more general
+  // function which computes the transition map on that piecewise affine
+  // system. 
 
   return transition_map;
+}
+
+std::map<std::pair<unsigned int, unsigned int>, Polygon_2>
+cannon::research::parl::compute_transition_map(const
+    std::vector<std::pair<Polygon_2, AutonomousLinearParams>>& pwa_func) {
+
+  log_info("Computing transition map for PWA system with", pwa_func.size(), "regions");
+
+  std::map<std::pair<unsigned int, unsigned int>, Polygon_2> transition_map;
+  for (unsigned int i = 0; i < pwa_func.size(); i++) {
+    // If the dynamics are not invertible, we can't compute a transition map for this region
+    // TODO Should the transition map just be the whole region? This represents
+    // a lack of data in this region, so it's not clear what the correct
+    // approach is.
+    auto pair = pwa_func[i];
+    if (pair.second.A_.determinant() == 0) 
+      continue;
+
+    for (unsigned int j = 0; j < pwa_func.size(); j++) {
+      auto pair2 = pwa_func[j];
+
+      // Handle min sat poly 
+      Polygon_2 premap_set =  compute_premap_set(pair.first, pair2.first,
+          pair.second);
+
+      if (premap_set.size() != 0) {
+        transition_map.insert(std::make_pair(std::make_pair(i, j), premap_set));
+      }
+    }
+  }
+
+  return transition_map;
+}
+
+std::vector<std::pair<Polygon_2, AutonomousLinearParams>>
+cannon::research::parl::compute_parl_pwa_func(std::shared_ptr<Parl> parl, VD
+    diagram) {
+
+  std::vector<std::pair<Polygon_2, AutonomousLinearParams>> pwa_func;
+
+  auto voronoi_polygons = create_bounded_voronoi_polygons(parl, diagram);
+  log_info("Voronoi diagram has", voronoi_polygons.size(), "bounded polygons");
+
+  std::map<unsigned int, std::tuple<Polygon_2, Polygon_2, Polygon_2>> sat_voronoi_polygons;
+  for (auto& pair : voronoi_polygons) {
+    log_info("Checking saturation of region", pair.first);
+
+    //Polygon_2 new_linear_poly, min_sat_poly, max_sat_poly;
+    //std::tie(new_linear_poly, min_sat_poly, max_sat_poly) =
+    //  get_saturated_polygons(pair.second, parl->get_K_matrix_idx_(pair.first),
+    //      parl->get_k_vector_idx_(pair.first)[0]);
+
+    sat_voronoi_polygons[pair.first] = get_saturated_polygons(pair.second,
+        parl->get_K_matrix_idx_(pair.first),
+        parl->get_k_vector_idx_(pair.first)[0]);
+  }
+
+  auto dynamics = parl->get_controlled_system();
+  auto min_sat_dynamics = parl->get_min_sat_controlled_system();
+  auto max_sat_dynamics = parl->get_max_sat_controlled_system();
+ 
+  for (auto const& pair : sat_voronoi_polygons) {
+    unsigned int i = pair.first;
+
+    Polygon_2 linear_poly, min_sat_poly, max_sat_poly;
+    std::tie(linear_poly, min_sat_poly, max_sat_poly) = sat_voronoi_polygons[pair.first];
+
+    if (min_sat_poly.size() != 0) {
+      pwa_func.push_back(std::make_pair(min_sat_poly, min_sat_dynamics[i]));
+    }
+
+    if (max_sat_poly.size() != 0) {
+      pwa_func.push_back(std::make_pair(max_sat_poly, max_sat_dynamics[i]));
+    }
+
+    if (linear_poly.size() != 0) {
+      pwa_func.push_back(std::make_pair(linear_poly, dynamics[i]));
+    }
+  }
+
+
+  return pwa_func;
 }
 
 std::map<unsigned int, Polygon_2> cannon::research::parl::create_bounded_voronoi_polygons(
@@ -139,13 +219,8 @@ std::map<unsigned int, Polygon_2> cannon::research::parl::create_bounded_voronoi
 
         ret_map.insert(std::make_pair(i, polygon));
       }
-      // TODO Add else case, intersect unbounded polygon with bounding
-      // rectangle. Turns out that this is nontrivial, and for the inverted
-      // pendulum we would only be bounding the velocity dimension. For now I'm
-      // not going to worry about it
-      //
-      // Update: Might be able to handle this case using Nef_polyhedron, as in
-      // get_saturated_polygons below.
+      // TODO Also add bounds on state space to Voronoi diagram. Construct
+      // Nef_polyhedron_2 with state space bounds for unbounded Voronoi polygons.
     } else {
       throw std::runtime_error("Ref point query did not result in Voronoi face.");
     }
@@ -284,13 +359,8 @@ Polygon_2 cannon::research::parl::extract_finite_face_polygon(const Nef_polyhedr
       assert(hit == end); // We should not have any holes for Voronoi regions under affine maps
 
       // Loop back over halfedges and construct polygon
-      log_info("Constructing polygon:");
       do {
         Vertex_const_handle vh = e.target(hafc);
-        if (e.is_standard(vh))
-          log_info("\t Point:", e.point(vh));
-        else
-          log_info("\t Ray: ", e.ray(vh));
         // If this face contains extended points (rays) then it's not the face
         // we're looking for
         if (!e.is_standard(vh)) {

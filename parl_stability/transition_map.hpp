@@ -29,7 +29,8 @@ namespace cannon {
 
       /*!
        * Create the transition map corresponding to the controlled system
-       * learned by the input PARL agent on the input Voronoi diagram.
+       * learned by the input PARL agent on the input Voronoi diagram. Note
+       * that the transition map is with respect to the PARL reference points.
        *
        * \param parl The PARL agent.
        * \param diagram The PARL reference point Voronoi diagram.
@@ -41,6 +42,27 @@ namespace cannon {
       std::map<std::pair<unsigned int, unsigned int>,
         Polygon_2> compute_transition_map(std::shared_ptr<Parl> parl, VD
             diagram);
+
+      /*!
+       * Compute transition map of the input PWA system.
+       */
+      std::map<std::pair<unsigned int, unsigned int>, Polygon_2>
+        compute_transition_map(const std::vector<std::pair<Polygon_2,
+            AutonomousLinearParams>>& pwa_func);
+
+      /*!
+       * Compute the effective PWA controlled system represented by a PARL
+       * controller over estimated dynamics, taking into account controller
+       * saturation.
+       *
+       * \param parl The PARL agent.
+       * \param diagram The PARL reference point Voronoi diagram.
+       *
+       * \returns A vector of Polygons and associated dynamics, extracted from
+       * the Parl-controlled system.
+       */
+      std::vector<std::pair<Polygon_2, AutonomousLinearParams>>
+        compute_parl_pwa_func(std::shared_ptr<Parl> parl, VD diagram);
 
       /*!
        * Create bounded polygons from the input voronoi diagram corresponding
