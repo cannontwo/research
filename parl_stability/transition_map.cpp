@@ -8,31 +8,29 @@ std::map<std::pair<unsigned int, unsigned int>, Polygon_2>
   auto voronoi_polygons = create_bounded_voronoi_polygons(parl, diagram);
   log_info("Voronoi diagram has", voronoi_polygons.size(), "bounded polygons");
 
+
+  std::map<unsigned int, std::tuple<Polygon_2, Polygon_2, Polygon_2>> sat_voronoi_polygons;
   unsigned int sat_regions = 0;
   for (auto& pair : voronoi_polygons) {
     log_info("Checking saturation of region", pair.first);
 
-    Polygon_2 new_linear_poly, min_sat_poly, max_sat_poly;
+    //Polygon_2 new_linear_poly, min_sat_poly, max_sat_poly;
+    //std::tie(new_linear_poly, min_sat_poly, max_sat_poly) =
+    //  get_saturated_polygons(pair.second, parl->get_K_matrix_idx_(pair.first),
+    //      parl->get_k_vector_idx_(pair.first)[0]);
 
-    std::tie(new_linear_poly, min_sat_poly, max_sat_poly) =
-      get_saturated_polygons(pair.second, parl->get_K_matrix_idx_(pair.first),
-          parl->get_k_vector_idx_(pair.first)[0]);
-
-
-    if (min_sat_poly.size() != 0 || max_sat_poly.size() != 0) {
-      // TODO Adjust Voronoi polygon collection
-      
-      sat_regions += 1;
-    }
+    sat_voronoi_polygons[pair.first] = get_saturated_polygons(pair.second,
+        parl->get_K_matrix_idx_(pair.first),
+        parl->get_k_vector_idx_(pair.first)[0]);
   }
 
-  log_info(sat_regions, "Voronoi cells exhibited controller saturation");
-
   auto dynamics = parl->get_controlled_system();
+  auto min_sat_dynamics = parl->get_min_sat_controlled_system();
+  auto max_sat_dynamics = parl->get_max_sat_controlled_system();
  
   // Compute transition map
   std::map<std::pair<unsigned int, unsigned int>, Polygon_2> transition_map;
-  for (auto const& pair : voronoi_polygons) {
+  for (auto const& pair : sat_voronoi_polygons) {
     unsigned int i = pair.first;
 
     // If the dynamics are not invertible, we can't compute a transition map for this region
@@ -42,38 +40,74 @@ std::map<std::pair<unsigned int, unsigned int>, Polygon_2>
     if (dynamics[i].A_.determinant() == 0) 
       continue;
 
-    std::pair<Polygon_2, Transformation> transformed_poly_pair =
-      affine_map_polygon(pair.second, dynamics[i]);
-    Polygon_2 trans_poly = transformed_poly_pair.first;
-
-    assert(trans_poly.is_simple());
-
-    if (trans_poly.orientation() != CGAL::COUNTERCLOCKWISE) {
-      trans_poly.reverse_orientation();
-    }
-
+    Polygon_2 linear_poly, min_sat_poly, max_sat_poly;
+    std::tie(linear_poly, min_sat_poly, max_sat_poly) = sat_voronoi_polygons[pair.first];
     for (auto& pair2 : voronoi_polygons) {
       unsigned int j = pair2.first;
+      std::vector<Polygon_2> premap_polys;
 
-      std::vector<Polygon_with_holes_2> intersection_polys;
-      CGAL::intersection(trans_poly, pair2.second,
-          std::back_inserter(intersection_polys));
+      if (min_sat_poly.size() != 0) {
+        // Handle min sat poly 
+        Polygon_2 original_set =  compute_premap_set(min_sat_poly,
+            pair2.second, min_sat_dynamics[i]);
 
-      // For intersections of voronoi polygons, all regions should be convex
-      assert(intersection_polys.size() == 0 || intersection_polys.size() == 1);
-
-      if (intersection_polys.size() == 1) {
-        // There shouldn't be any holes for Voronoi regions
-        assert(intersection_polys[0].number_of_holes() == 0);
-        Polygon_2 intersection_poly = intersection_polys[0].outer_boundary();
-
-        Polygon_2 original_set =
-          CGAL::transform(transformed_poly_pair.second, intersection_poly);
-        transition_map.insert(std::make_pair(std::make_pair(i, j), original_set));
+        if (original_set.size() != 0) {
+          premap_polys.push_back(original_set);
+        }
+        
+        sat_regions += 1;
       }
-    }
-  }
 
+      if (max_sat_poly.size() != 0) {
+        // Handle max sat poly
+        Polygon_2 original_set =  compute_premap_set(max_sat_poly,
+            pair2.second, max_sat_dynamics[i]);
+
+        if (original_set.size() != 0) {
+          premap_polys.push_back(original_set);
+        }
+        
+        sat_regions += 1;
+      }
+
+      if (linear_poly.size() != 0) {
+        Polygon_2 original_set =  compute_premap_set(linear_poly, pair2.second, dynamics[i]);
+
+        if (original_set.size() != 0) {
+          premap_polys.push_back(original_set);
+        }
+      }
+
+      if (premap_polys.size() > 0) {
+        if (premap_polys.size() == 1) {
+          transition_map.insert(std::make_pair(std::make_pair(i, j), premap_polys[0]));
+        } else {
+          Polygon_2 premap_union;
+          Polygon_with_holes_2 tmp_union;
+
+          // TODO Compute union over premap_polys 
+          // premap_polys either has size 2 or 3, via if statements above
+          bool overlap = CGAL::join(premap_polys[0], premap_polys[1], tmp_union);
+          log_info("Premap poly overlap between 0 and 1:", overlap);
+
+          if (premap_polys.size() == 3) {
+            Polygon_with_holes_2 tmp_union_2(tmp_union);
+            overlap = CGAL::join(tmp_union_2, premap_polys[2], tmp_union);
+            log_info("Premap poly overlap between 0+1 and 2:", overlap);
+          }
+
+          // Since the map is continuous within each Voronoi region, there should
+          // be no holes and we can just take the outer boundary
+          assert(tmp_union.number_of_holes() == 0);
+          premap_union = tmp_union.outer_boundary();
+          transition_map.insert(std::make_pair(std::make_pair(i, j), premap_union));
+        }
+      }
+
+    } // for (pair2)
+  } // for (pair)
+
+  log_info(sat_regions, "Voronoi cells exhibited controller saturation");
   log_info("Computed transition map with", transition_map.size(), "elements");
 
   return transition_map;
@@ -109,6 +143,9 @@ std::map<unsigned int, Polygon_2> cannon::research::parl::create_bounded_voronoi
       // rectangle. Turns out that this is nontrivial, and for the inverted
       // pendulum we would only be bounding the velocity dimension. For now I'm
       // not going to worry about it
+      //
+      // Update: Might be able to handle this case using Nef_polyhedron, as in
+      // get_saturated_polygons below.
     } else {
       throw std::runtime_error("Ref point query did not result in Voronoi face.");
     }
@@ -127,6 +164,39 @@ std::pair<Polygon_2, Transformation> cannon::research::parl::affine_map_polygon(
   auto ret_poly = CGAL::transform(aff_trans, p);
 
   return std::make_pair(ret_poly, aff_trans.inverse());
+}
+
+Polygon_2 cannon::research::parl::compute_premap_set(const Polygon_2& map_poly,
+    const Polygon_2& test_poly, const AutonomousLinearParams& map) {
+
+  std::pair<Polygon_2, Transformation> transformed_poly_pair =
+    affine_map_polygon(map_poly, map);
+  Polygon_2 trans_poly = transformed_poly_pair.first;
+
+  assert(trans_poly.is_simple());
+
+  if (trans_poly.orientation() != CGAL::COUNTERCLOCKWISE) {
+    trans_poly.reverse_orientation();
+  }
+
+  std::vector<Polygon_with_holes_2> intersection_polys;
+  CGAL::intersection(trans_poly, test_poly,
+      std::back_inserter(intersection_polys));
+
+  // For intersections of voronoi polygons, all regions should be convex
+  assert(intersection_polys.size() == 0 || intersection_polys.size() == 1);
+
+  Polygon_2 original_set;
+  if (intersection_polys.size() == 1) {
+    // There shouldn't be any holes for Voronoi regions
+    assert(intersection_polys[0].number_of_holes() == 0);
+    Polygon_2 intersection_poly = intersection_polys[0].outer_boundary();
+
+    original_set = CGAL::transform(transformed_poly_pair.second,
+        intersection_poly);
+  }
+
+  return original_set;
 }
 
 std::tuple<Polygon_2, Polygon_2, Polygon_2>

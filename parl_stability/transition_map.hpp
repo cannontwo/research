@@ -27,9 +27,6 @@ namespace cannon {
   namespace research {
     namespace parl {
 
-      // Used to convert otherwise infinite rays into long segments
-      const static int RAY_LENGTH = 1000;
-
       /*!
        * Create the transition map corresponding to the controlled system
        * learned by the input PARL agent on the input Voronoi diagram.
@@ -74,6 +71,21 @@ namespace cannon {
           const AutonomousLinearParams& map);
 
       /*!
+       * Compute the preimage of the intersection of map_poly transformed by
+       * the input affine map and test_poly. This function is specifically
+       * designed for well-behaved Voronoi polygons, but should be
+       * generalizable.
+       *
+       * \param map_poly The polygon to be affine mapped.
+       * \param test_poly The polygon to test intersection against.
+       * \param map The affine map to apply to map_poly.
+       *
+       * \returns The preimage of the intersection of map(map_poly) and test_poly.
+       */
+      Polygon_2 compute_premap_set(const Polygon_2& map_poly, const Polygon_2&
+          test_poly, const AutonomousLinearParams& map);
+
+      /*!
        * Get polygons representing areas where control is linear and min/max
        * saturated. This is specifically for the R^2 state space, R^1 control
        * space case (i.e. inverted pendulum). For more general cases, more work
@@ -88,7 +100,14 @@ namespace cannon {
           lower=-2.0, double upper=2.0);
 
       /*!
-       * TODO
+       * Extracts a polygon from a Nef_polyhedron explorer which is assumed to
+       * contain a single finite face. This is specifically used for extracting
+       * controller saturation regions on top of the Parl Voronoi diagram, so
+       * its usage in other scenarios is probably sketchy.
+       *
+       * \param e Explorer corresponding to a planar Nef_polyhedron map.
+       *
+       * \returns A polygon representing the single finite face.
        */
       Polygon_2 extract_finite_face_polygon(const Nef_polyhedron::Explorer& e);
 

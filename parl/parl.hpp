@@ -102,7 +102,10 @@ namespace cannon {
           MatrixXd get_A_matrix_idx_(int idx);
           MatrixXd get_K_matrix_idx_(int idx);
           VectorXd get_k_vector_idx_(int idx);
+
           std::vector<AutonomousLinearParams> get_controlled_system();
+          std::vector<AutonomousLinearParams> get_min_sat_controlled_system();
+          std::vector<AutonomousLinearParams> get_max_sat_controlled_system();
 
         private:
           VectorXd make_combined_vec_(const VectorXd& state, const VectorXd& action);

@@ -220,6 +220,48 @@ std::vector<AutonomousLinearParams> Parl::get_controlled_system() {
   return ret_vec;
 }
 
+std::vector<AutonomousLinearParams> Parl::get_min_sat_controlled_system() {
+  std::vector<AutonomousLinearParams> ret_vec;
+
+  auto bounds = action_space_->getBounds();
+  VectorXd min_sat_control = VectorXd::Zero(bounds.low.size());
+  for (unsigned int i = 0; i < bounds.low.size(); i++) {
+    min_sat_control[i] = bounds.low[i];
+  }
+
+  for (unsigned int i = 0; i < num_refs_; i++) {
+    VectorXd c = dynamics_models_[i].get_identified_mats().second;
+
+    MatrixXd controlled_A = get_A_matrix_idx_(i);
+    VectorXd controlled_c = (get_B_matrix_idx_(i) * min_sat_control) + c;
+    ret_vec.push_back(AutonomousLinearParams(controlled_A, controlled_c,
+          dynamics_models_[i].get_num_data()));
+  }
+
+  return ret_vec;
+}
+
+std::vector<AutonomousLinearParams> Parl::get_max_sat_controlled_system() {
+  std::vector<AutonomousLinearParams> ret_vec;
+
+  auto bounds = action_space_->getBounds();
+  VectorXd max_sat_control = VectorXd::Zero(bounds.high.size());
+  for (unsigned int i = 0; i < bounds.high.size(); i++) {
+    max_sat_control[i] = bounds.high[i];
+  }
+
+  for (unsigned int i = 0; i < num_refs_; i++) {
+    VectorXd c = dynamics_models_[i].get_identified_mats().second;
+
+    MatrixXd controlled_A = get_A_matrix_idx_(i);
+    VectorXd controlled_c = (get_B_matrix_idx_(i) * max_sat_control) + c;
+    ret_vec.push_back(AutonomousLinearParams(controlled_A, controlled_c,
+          dynamics_models_[i].get_num_data()));
+  }
+
+  return ret_vec;
+}
+
 // Private methods
 VectorXd Parl::make_combined_vec_(const VectorXd& state, const VectorXd& action) {
   check_state_dim_(state);
