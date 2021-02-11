@@ -98,6 +98,7 @@ namespace cannon {
           void save();
 
           MatrixXd get_refs();
+          unsigned int get_nearest_ref_idx(const VectorXd& query);
           MatrixXd get_B_matrix_idx_(int idx);
           MatrixXd get_A_matrix_idx_(int idx);
           MatrixXd get_K_matrix_idx_(int idx);

@@ -28,6 +28,20 @@ int main() {
   auto controlled_system = r.get_agent()->get_controlled_system();
   log_info(controlled_system[0].A_);
 
+  // TODO Delete, just for debugging
+  VectorXd query = VectorXd::Zero(2);
+  unsigned int zero_idx = r.get_agent()->get_nearest_ref_idx(query);
+  auto zero_local_system = r.get_agent()->get_controlled_system()[zero_idx];
+  auto zero_B = r.get_agent()->get_B_matrix_idx_(zero_idx);
+  auto zero_k = r.get_agent()->get_k_vector_idx_(zero_idx);
+  auto zero_c = zero_local_system.c_ - (zero_B * zero_k);
+
+  auto analytic_k = -(zero_B.transpose() * zero_B).inverse() * zero_B.transpose() * zero_c;
+
+  log_info("Affine term of region containing zero is", zero_local_system.c_);
+  log_info("Analytic k is", analytic_k, ", learned k is", zero_k);
+  log_info("Analytic controlled system has affine term", zero_B * analytic_k + zero_c, "\n");
+
   // Compute polytopal representation of Voronoi diagram of PARL refs
   auto diagram = compute_voronoi_diagram(r.get_agent());
 

@@ -202,6 +202,13 @@ MatrixXd Parl::get_refs() {
   return refs_;
 }
 
+unsigned int Parl::get_nearest_ref_idx(const VectorXd& query) {
+  if (query.size() != state_dim_)
+    throw std::runtime_error("Passed state had the wrong dimension");
+  
+  return ref_tree_.get_nearest_idx(query);
+}
+
 std::vector<AutonomousLinearParams> Parl::get_controlled_system() {
   std::vector<AutonomousLinearParams> ret_vec;
 
