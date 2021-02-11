@@ -75,12 +75,17 @@ namespace cannon {
               // Checking KDT construction
               assert(ref_tree_.get_nearest_idx(refs_.col(i)) == i);
             }
+
+            VectorXd zero_vec = VectorXd::Zero(state_dim_);
+            zero_ref_idx_ = ref_tree_.get_nearest_idx(zero_vec);
           }
 
           void process_datum(const VectorXd& state, const VectorXd& action,
               double reward, const VectorXd& next_state, bool done = false,
               bool use_local = false);
-          void value_grad_update_controller(const VectorXd& state);
+
+          // TODO May want to make stability setting a hyperparameter
+          void value_grad_update_controller(const VectorXd& state, bool stability=true);
 
           VectorXd predict_next_state(const VectorXd& state, const VectorXd& action, 
               bool use_local = false);
@@ -136,6 +141,10 @@ namespace cannon {
           int num_refs_;
           MatrixXd refs_;
           Hyperparams params_;
+
+          // Ref whose Voronoi region contains zero. Assuming that only one
+          // contains zero for now
+          unsigned int zero_ref_idx_;
 
           std::vector<RLSFilter> dynamics_models_;
           std::vector<AffineController> controllers_;
