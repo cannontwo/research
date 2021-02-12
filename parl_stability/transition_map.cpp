@@ -79,7 +79,6 @@ std::map<std::pair<unsigned int, unsigned int>, Polygon_2>
           Polygon_2 premap_union;
           Polygon_with_holes_2 tmp_union;
 
-          // TODO Compute union over premap_polys 
           // premap_polys either has size 2 or 3, via if statements above
           CGAL::join(premap_polys[0], premap_polys[1], tmp_union);
 
@@ -98,15 +97,6 @@ std::map<std::pair<unsigned int, unsigned int>, Polygon_2>
 
     } // for (pair2)
   } // for (pair)
-
-  // TODO May want to also return the *true* piecewise affine system: a mapping
-  // between arbitrary indices and pairs of polygons and affine dynamics.
-  //
-  // TODO Alternatively, could split this function in two: one to process the
-  // initial voronoi diagram and compute the "real" piecewise affine system
-  // that takes into account controller saturation, then a more general
-  // function which computes the transition map on that piecewise affine
-  // system. 
 
   return transition_map;
 }
@@ -138,6 +128,8 @@ cannon::research::parl::compute_transition_map(const
         transition_map.insert(std::make_pair(std::make_pair(i, j), premap_set));
       }
     }
+
+    // TODO Compute polygon mapped outside state space bounds
   }
 
   return transition_map;
@@ -205,8 +197,7 @@ std::map<unsigned int, Polygon_2> cannon::research::parl::create_bounded_voronoi
 
     // Locate result should be a face, since this is a ref
     if (VD::Face_handle* fh = boost::get<VD::Face_handle>(&locate_result)) {
-
-      // For now, only adding bounded faces
+      // Handle bounded face
       if (!(*fh)->is_unbounded()) {
         Polygon_2 polygon;
         VD::Ccb_halfedge_circulator ec_start = (*fh)->ccb();
@@ -218,9 +209,102 @@ std::map<unsigned int, Polygon_2> cannon::research::parl::create_bounded_voronoi
         } while (++ec != ec_start);
 
         ret_map.insert(std::make_pair(i, polygon));
+      } else {
+        // TODO Clean up this unbounded polygon handling into separate function
+        
+        // State space bounds
+        Nef_polyhedron::Point p0(-M_PI, -8.0), p1(M_PI, -8.0), p2(M_PI, 8.0), p3(-M_PI, 8.0);
+        Nef_polyhedron::Point bound_rect[4] = {p0, p1, p2, p3};
+        Nef_polyhedron bound_rect_nef_poly(bound_rect, bound_rect+4);
+        Nef_polyhedron region_nef_poly(bound_rect_nef_poly);
+
+        Nef_polyhedron::Point ref_point(refs(0, i), refs(1, i));
+        auto nef_locate_result = region_nef_poly.locate(ref_point);
+        assert(region_nef_poly.contains(nef_locate_result));
+
+        VD::Ccb_halfedge_circulator ec_start = (*fh)->ccb();
+        VD::Ccb_halfedge_circulator ec = ec_start;
+
+        log_info("Constructing polygon for unbounded face");
+
+        do {
+          // Iterate around unbounded face, intersecting each half-plane
+          // corresponding to an edge with polyhedron
+          if (ec->is_segment()) {
+            // Handle finite segment
+            assert(ec->has_source() && ec->has_target());
+            Nef_polyhedron::Point src(ec->source()->point().x(),
+                ec->source()->point().y());
+            Nef_polyhedron::Point tgt(ec->target()->point().x(),
+                ec->target()->point().y());
+
+            log_info("\tLine segment from", src, "to", tgt);
+
+            Nef_polyhedron::Line edge_line(src, tgt);
+            assert(edge_line.has_on_positive_side(ref_point));
+
+            Nef_polyhedron halfplane(edge_line, Nef_polyhedron::INCLUDED);
+
+            Nef_polyhedron tmp_intersection = region_nef_poly.intersection(halfplane);
+            assert(!tmp_intersection.is_empty());
+
+            region_nef_poly = tmp_intersection;
+
+            auto nef_locate_result = region_nef_poly.locate(ref_point);
+            assert(region_nef_poly.contains(nef_locate_result));
+          } else {
+            // Handle ray
+            VD::Delaunay_edge dual_edge = ec->dual();
+
+            // This is pretty jank, but might be the most parsimonious way to
+            // construct the ray
+            CGAL::Object ray_obj = diagram.dual().dual(dual_edge);  
+            const K::Ray_2 *ray = CGAL::object_cast<K::Ray_2>(&ray_obj);
+            assert(ray);
+
+            K::Direction_2 ray_dir = ray->direction();
+            K::Point_2 ray_src = ray->source();
+
+            Nef_polyhedron::Point src(ray_src.x(), ray_src.y());
+            Nef_polyhedron::Point tgt(ray_src.x() + ray_dir.dx(),
+                ray_src.y() + ray_dir.dy());
+
+            Nef_polyhedron::Line edge_line;
+            if (ec->has_source()) {
+              log_info("\tRay has source, ray from", src, "to", tgt);
+              edge_line = Nef_polyhedron::Line(src, tgt);
+            } else if (ec->has_target()) {
+              log_info("\tRay has target, ray from", tgt, "to", src);
+              edge_line = Nef_polyhedron::Line(tgt, src);
+            } else {
+              throw std::runtime_error("We should not be here");
+            }
+
+            assert(edge_line.has_on_positive_side(ref_point));
+
+            Nef_polyhedron halfplane(edge_line, Nef_polyhedron::INCLUDED);
+
+            Nef_polyhedron tmp_intersection = region_nef_poly.intersection(halfplane);
+            assert(!tmp_intersection.is_empty());
+
+            region_nef_poly = tmp_intersection;
+
+            auto nef_locate_result = region_nef_poly.locate(ref_point);
+            assert(region_nef_poly.contains(nef_locate_result));
+          }
+
+        } while (++ec != ec_start);
+
+        Polygon_2 polygon = extract_finite_face_polygon(region_nef_poly.explorer());
+        assert(polygon.is_simple() && polygon.size() > 0);
+
+        if (polygon.orientation() != CGAL::COUNTERCLOCKWISE) {
+          polygon.reverse_orientation();
+        }
+
+        ret_map.insert(std::make_pair(i, polygon));
+
       }
-      // TODO Also add bounds on state space to Voronoi diagram. Construct
-      // Nef_polyhedron_2 with state space bounds for unbounded Voronoi polygons.
     } else {
       throw std::runtime_error("Ref point query did not result in Voronoi face.");
     }
