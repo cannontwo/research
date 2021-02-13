@@ -10,11 +10,13 @@
 #include <CGAL/Nef_polyhedron_2.h>
 #include <CGAL/Lazy_exact_nt.h>
 #include <CGAL/Extended_cartesian.h>
+#include <CGAL/Polygon_set_2.h>
 
 #include <cannon/research/parl_stability/voronoi.hpp>
 
 using Polygon_2 = CGAL::Polygon_2<K>;
 using Polygon_with_holes_2 = CGAL::Polygon_with_holes_2<K>;
+using Polygon_set_2 = CGAL::Polygon_set_2<K>;
 using Transformation = CGAL::Aff_transformation_2<K>;
 
 using Extended_kernel = CGAL::Extended_cartesian<K::FT>;
@@ -46,9 +48,10 @@ namespace cannon {
       /*!
        * Compute transition map of the input PWA system.
        */
-      std::map<std::pair<unsigned int, unsigned int>, Polygon_2>
-        compute_transition_map(const std::vector<std::pair<Polygon_2,
-            AutonomousLinearParams>>& pwa_func);
+      std::pair<std::map<std::pair<unsigned int, unsigned int>, Polygon_2>,
+        std::map<unsigned int, std::vector<Polygon_2>>> compute_transition_map(const
+            std::vector<std::pair<Polygon_2, AutonomousLinearParams>>&
+            pwa_func);
 
       /*!
        * Compute the effective PWA controlled system represented by a PARL

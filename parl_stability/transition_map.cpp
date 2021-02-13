@@ -101,13 +101,14 @@ std::map<std::pair<unsigned int, unsigned int>, Polygon_2>
   return transition_map;
 }
 
-std::map<std::pair<unsigned int, unsigned int>, Polygon_2>
-cannon::research::parl::compute_transition_map(const
-    std::vector<std::pair<Polygon_2, AutonomousLinearParams>>& pwa_func) {
+std::pair<std::map<std::pair<unsigned int, unsigned int>, Polygon_2>,
+  std::map<unsigned int, std::vector<Polygon_2>>> cannon::research::parl::compute_transition_map(const
+      std::vector<std::pair<Polygon_2, AutonomousLinearParams>>& pwa_func) {
 
   log_info("Computing transition map for PWA system with", pwa_func.size(), "regions");
 
   std::map<std::pair<unsigned int, unsigned int>, Polygon_2> transition_map;
+  std::map<unsigned int, std::vector<Polygon_2>> out_of_bounds_polys;
   for (unsigned int i = 0; i < pwa_func.size(); i++) {
     // If the dynamics are not invertible, we can't compute a transition map for this region
     // TODO Should the transition map just be the whole region? This represents
@@ -117,6 +118,7 @@ cannon::research::parl::compute_transition_map(const
     if (pair.second.A_.determinant() == 0) 
       continue;
 
+    Polygon_set_2 premap_union;
     for (unsigned int j = 0; j < pwa_func.size(); j++) {
       auto pair2 = pwa_func[j];
 
@@ -125,14 +127,47 @@ cannon::research::parl::compute_transition_map(const
           pair.second);
 
       if (premap_set.size() != 0) {
+        if (premap_set.orientation() != CGAL::COUNTERCLOCKWISE) {
+          premap_set.reverse_orientation();
+        }
         transition_map.insert(std::make_pair(std::make_pair(i, j), premap_set));
+
+        if (premap_union.is_empty())
+          premap_union.insert(premap_set);
+        else {
+          premap_union.join(premap_set);
+        }
       }
     }
 
-    // TODO Compute polygon mapped outside state space bounds
+    // Compute portion of this polygon mapped outside of state space (not in another polygon)
+    Polygon_set_2 diff_set;
+    diff_set.insert(pair.first);
+    diff_set.difference(premap_union);
+
+    std::list<Polygon_with_holes_2> res;
+    std::list<Polygon_with_holes_2>::const_iterator it;
+    diff_set.polygons_with_holes (std::back_inserter (res));
+
+    // There may be multiple disconnected polgyons mapped out of bounds, but we
+    // don't expect any of them to have holes.
+    std::vector<Polygon_2> diff_polys;
+    for (auto& poly_wh : res) {
+      assert(poly_wh.number_of_holes() == 0);
+      Polygon_2 diff_poly = poly_wh.outer_boundary();
+
+      if (diff_poly.size() != 0) {
+        if (diff_poly.orientation() != CGAL::COUNTERCLOCKWISE) {
+          diff_poly.reverse_orientation();
+        }
+
+        diff_polys.push_back(diff_poly);
+      }
+    }
+    out_of_bounds_polys.insert(std::make_pair(i, diff_polys));
   }
 
-  return transition_map;
+  return std::make_pair(transition_map, out_of_bounds_polys);
 }
 
 std::vector<std::pair<Polygon_2, AutonomousLinearParams>>
@@ -238,8 +273,6 @@ std::map<unsigned int, Polygon_2> cannon::research::parl::create_bounded_voronoi
             Nef_polyhedron::Point tgt(ec->target()->point().x(),
                 ec->target()->point().y());
 
-            log_info("\tLine segment from", src, "to", tgt);
-
             Nef_polyhedron::Line edge_line(src, tgt);
             assert(edge_line.has_on_positive_side(ref_point));
 
@@ -271,10 +304,8 @@ std::map<unsigned int, Polygon_2> cannon::research::parl::create_bounded_voronoi
 
             Nef_polyhedron::Line edge_line;
             if (ec->has_source()) {
-              log_info("\tRay has source, ray from", src, "to", tgt);
               edge_line = Nef_polyhedron::Line(src, tgt);
             } else if (ec->has_target()) {
-              log_info("\tRay has target, ray from", tgt, "to", src);
               edge_line = Nef_polyhedron::Line(tgt, src);
             } else {
               throw std::runtime_error("We should not be here");

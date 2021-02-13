@@ -80,10 +80,10 @@ int main() {
   auto parl_pwa_func = compute_parl_pwa_func(r.get_agent(), diagram);
   auto transition_map = compute_transition_map(parl_pwa_func);
 
-  log_info("Computed transition map with", transition_map.size(), "elements");
+  log_info("Computed transition map with", transition_map.first.size(), "elements");
 
   Plotter p;
-  for (auto const& pair : transition_map) {
+  for (auto const& pair : transition_map.first) {
     p.plot_polygon(pair.second, generate_random_color());
   }
   p.render();
@@ -96,7 +96,7 @@ int main() {
       test_state[0] = -M_PI + ((2.0 * M_PI) / GRID_SIZE) * i;
       test_state[1] = -8.0 + (16.0 / GRID_SIZE) * j;
 
-      bool verified = check_state_transition(parl_pwa_func, transition_map, test_state);
+      bool verified = check_state_transition(parl_pwa_func, transition_map.first, test_state);
       if (verified)
         num_verified += 1;
     }

@@ -48,13 +48,34 @@ int main() {
   // Create transition map using CGAL polygon affine mapping
   //auto transition_map = compute_transition_map(r.get_agent(), diagram);
   auto parl_pwa_func = compute_parl_pwa_func(r.get_agent(), diagram);
-  auto transition_map = compute_transition_map(parl_pwa_func);
 
-  log_info("Computed transition map with", transition_map.size(), "elements");
+  auto transition_map_pair = compute_transition_map(parl_pwa_func);
+
+  log_info("Computed transition map with", transition_map_pair.first.size(), "elements");
+  log_info(transition_map_pair.second.size(), "polygons mappped out of bounds");
 
   Plotter p;
-  for (auto const& pair : transition_map) {
-    p.plot_polygon(pair.second, generate_random_color());
+  //for (auto const& pair : parl_pwa_func) {
+  //  p.plot_polygon(pair.first, generate_random_color());
+  //}
+  for (auto const& pair : transition_map_pair.first) {
+    float hue_1 = pair.first.first  * (360.0 / (float)parl_pwa_func.size()); 
+    float hue_2 = pair.first.second * (360.0 / (float)parl_pwa_func.size());
+    auto rgb = hsv_to_rgb((hue_1 + hue_2) / 2.0, 0.75, 0.9);
+    Vector4f color = Vector4f::Ones();
+    color.head(3) = rgb;
+    p.plot_polygon(pair.second, color);
+  }
+
+
+  for (auto const& pair : transition_map_pair.second) {
+    float hue = pair.first  * (360.0 / (float)parl_pwa_func.size()); 
+    Vector4f color = Vector4f::Ones();
+    auto rgb = hsv_to_rgb(hue, 0.75, 0.25);
+    color.head(3) = rgb;
+    for (auto const& poly : pair.second) {
+      p.plot_polygon(poly, color);
+    }
   }
   p.render();
 
