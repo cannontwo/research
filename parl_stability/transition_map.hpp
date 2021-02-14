@@ -136,6 +136,16 @@ namespace cannon {
        */
       Polygon_2 extract_finite_face_polygon(const Nef_polyhedron::Explorer& e);
 
+      /*!
+       * Check whether input state is in input polygon.
+       * 
+       * \param state The state the check
+       * \param poly The polygon to check for containment
+       *
+       * \return Whether the polygon contains the input state.
+       */
+      bool is_inside(const Vector2d& state, const Polygon_2& poly);
+
     } // namespace parl
   } // namespace research
 } // namespace cannon

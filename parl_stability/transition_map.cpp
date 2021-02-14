@@ -498,3 +498,15 @@ Polygon_2 cannon::research::parl::extract_finite_face_polygon(const Nef_polyhedr
 
   throw std::runtime_error("Did not find finite face in nef_polyhedron explorer");
 }
+
+bool cannon::research::parl::is_inside(const Vector2d& state, const Polygon_2& poly) {
+  K::Point_2 query(state[0], state[1]);
+  switch (CGAL::bounded_side_2(poly.begin(), poly.end(), query, K())) {
+    case CGAL::ON_BOUNDED_SIDE:
+      return true;
+    case CGAL::ON_BOUNDARY:
+      return true;
+    case CGAL::ON_UNBOUNDED_SIDE:
+      return false;
+  }  
+}

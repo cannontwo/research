@@ -8,6 +8,7 @@
 #include <cannon/research/parl/envs/inverted_pendulum.hpp>
 #include <cannon/research/parl_stability/voronoi.hpp>
 #include <cannon/research/parl_stability/transition_map.hpp>
+#include <cannon/research/parl_stability/lyapunov_finding.hpp>
 #include <cannon/plot/plotter.hpp>
 #include <cannon/graphics/random_color.hpp>
 
@@ -81,4 +82,14 @@ int main() {
 
   // TODO Formulate and solve iterative LP giving Lyapunov function
   // (https://ieeexplore.ieee.org/document/6426761)
+  auto lyap = attempt_lp_solve(parl_pwa_func, transition_map_pair.first,
+      transition_map_pair.second);
+
+  Vector2d zero = Vector2d::Zero();
+  log_info("Value of Lyapunov function at 0 is", evaluate_lyap(lyap, zero));
+
+  Vector2d ones = Vector2d::Ones();
+  log_info("Value of Lyapunov function at (1, 1) is", evaluate_lyap(lyap, ones));
+
+  // Plot simple scatter plot of Lyapunov function
 }

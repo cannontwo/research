@@ -17,17 +17,6 @@ using namespace cannon::research::parl;
 using namespace cannon::plot;
 using namespace cannon::graphics;
 
-bool is_inside(const Vector2d& state, const Polygon_2& poly) {
-  K::Point_2 query(state[0], state[1]);
-  switch (CGAL::bounded_side_2(poly.begin(), poly.end(), query, K())) {
-    case CGAL::ON_BOUNDED_SIDE:
-      return true;
-    case CGAL::ON_BOUNDARY:
-      return true;
-    case CGAL::ON_UNBOUNDED_SIDE:
-      return false;
-  }  
-}
 
 bool check_state_transition(const std::vector<std::pair<Polygon_2,
     AutonomousLinearParams>>& pwa_func, const std::map<std::pair<unsigned int,
