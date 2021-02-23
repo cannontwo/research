@@ -65,7 +65,6 @@ int main() {
   auto diagram = compute_voronoi_diagram(r.get_agent());
 
   // Create transition map using CGAL polygon affine mapping
-  //auto transition_map = compute_transition_map(r.get_agent(), diagram);
   auto parl_pwa_func = compute_parl_pwa_func(r.get_agent(), diagram);
   auto transition_map = compute_transition_map(parl_pwa_func);
 
@@ -93,3 +92,4 @@ int main() {
 
   log_info("Transition map verified on", num_verified, "/", GRID_SIZE * GRID_SIZE, "grid states");
 }
+

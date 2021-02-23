@@ -13,11 +13,6 @@ using namespace cannon::ml;
 namespace cannon {
   namespace research {
     namespace parl {
-
-      using PWAFunc = std::vector<std::pair<Polygon_2, AutonomousLinearParams>>;
-      using TransitionMap = std::map<std::pair<unsigned int, unsigned int>, Polygon_2>;
-      using OutMap = std::map<unsigned int, std::vector<Polygon_2>>;
-
       struct LyapunovComponent {
 
         LyapunovComponent() = delete;
@@ -44,6 +39,10 @@ namespace cannon {
 
       std::vector<LyapunovComponent> attempt_lp_solve(const PWAFunc& pwa, const
           TransitionMap& transition_map, const OutMap& out_map, double M=100, double eps=1e-6);
+
+      std::vector<LyapunovComponent> find_lyapunov(const PWAFunc& pwa, const
+          TransitionMap& initial_transition_map, const OutMap& initial_out_map,
+          unsigned int max_iters=10);
 
       double evaluate_lyap(std::vector<LyapunovComponent> lyap, const Vector2d& query);
 

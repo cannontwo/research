@@ -13,6 +13,8 @@
 #include <CGAL/Polygon_set_2.h>
 
 #include <cannon/research/parl_stability/voronoi.hpp>
+#include <cannon/plot/plotter.hpp>
+#include <cannon/graphics/random_color.hpp>
 
 using Polygon_2 = CGAL::Polygon_2<K>;
 using Polygon_with_holes_2 = CGAL::Polygon_with_holes_2<K>;
@@ -25,25 +27,17 @@ using Halfedge_around_face_const_circulator = Nef_polyhedron::Explorer::Halfedge
 using Hole_const_iterator = Nef_polyhedron::Explorer::Hole_const_iterator;
 using Vertex_const_handle = Nef_polyhedron::Explorer::Vertex_const_handle;
 
+using namespace cannon::plot;
+using namespace cannon::graphics;
+
+
 namespace cannon {
   namespace research {
     namespace parl {
 
-      /*!
-       * Create the transition map corresponding to the controlled system
-       * learned by the input PARL agent on the input Voronoi diagram. Note
-       * that the transition map is with respect to the PARL reference points.
-       *
-       * \param parl The PARL agent.
-       * \param diagram The PARL reference point Voronoi diagram.
-       *
-       * \returns A map from pairs of indices (i, j) to polygons representing
-       * regions mapped from Voronoi region i to Voronoi region j by the PARL
-       * controlled system.
-       */
-      std::map<std::pair<unsigned int, unsigned int>,
-        Polygon_2> compute_transition_map(std::shared_ptr<Parl> parl, VD
-            diagram);
+      using PWAFunc = std::vector<std::pair<Polygon_2, AutonomousLinearParams>>;
+      using TransitionMap = std::map<std::pair<unsigned int, unsigned int>, Polygon_2>;
+      using OutMap = std::map<unsigned int, std::vector<Polygon_2>>;
 
       /*!
        * Compute transition map of the input PWA system.
@@ -145,6 +139,15 @@ namespace cannon {
        * \return Whether the polygon contains the input state.
        */
       bool is_inside(const Vector2d& state, const Polygon_2& poly);
+
+      /**
+       * Plot transition map and display plot.
+       *
+       * \param transition_map_pair The transition map to plot.
+       * \param pwa_func The PWA function over which the transition map is defined
+       */
+      void plot_transition_map(const std::pair<TransitionMap, OutMap>&
+          transition_map_pair, const PWAFunc& pwa_func);
 
     } // namespace parl
   } // namespace research

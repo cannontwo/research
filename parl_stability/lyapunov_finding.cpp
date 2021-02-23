@@ -135,27 +135,78 @@ std::vector<LyapunovComponent> cannon::research::parl::attempt_lp_solve(const
     }
   }
  
-  try {
-    log_info("Attempting to solve PWA Lyapunov LP");
-    auto result = opt.optimize();
-    log_info("Found solution to Lyapunov LP with objective", result.objective);
+  log_info("Attempting to solve PWA Lyapunov LP");
 
-    std::vector<LyapunovComponent> lyap;
-    for (unsigned int i = 0; i < pwa.size(); i++) {
-      RowVector2d F = RowVector2d::Zero();
-      F[0] = result.solution[3*i + 3];
-      F[1] = result.solution[3*i + 4];
+  // This will throw a std::runtime_error if the LP is infeasible
+  auto result = opt.optimize();
+  log_info("Found solution to Lyapunov LP with objective", result.objective);
 
-      LyapunovComponent component(pwa[i].first, F, result.solution[3*i + 5]);
-      lyap.push_back(component);
-    }
+  std::vector<LyapunovComponent> lyap;
+  for (unsigned int i = 0; i < pwa.size(); i++) {
+    RowVector2d F = RowVector2d::Zero();
+    F[0] = result.solution[3*i + 3];
+    F[1] = result.solution[3*i + 4];
 
-    return lyap;
-    
-  } catch (...) {
-    // TODO Handle infeasible LP (recompute transition map and out-of-bounds map)
-    throw std::runtime_error("Infeasible Lyapunov LP not implemented yet.");
+    LyapunovComponent component(pwa[i].first, F, result.solution[3*i + 5]);
+    lyap.push_back(component);
   }
+
+  return lyap;
+    
+}
+
+std::vector<LyapunovComponent> cannon::research::parl::find_lyapunov(const
+    PWAFunc& pwa, const TransitionMap& initial_transition_map, const OutMap&
+    initial_out_map, unsigned int max_iters) {
+
+  auto current_pwa = pwa;
+  auto current_transition_map = initial_transition_map;
+  auto current_out_map = initial_out_map;
+
+  for (unsigned int i = 0; i < max_iters; i++) {
+    try {
+      log_info("On iteration", i, "attempting to solve LP for PWA func with", pwa.size(), "regions");
+      auto lyap = attempt_lp_solve(current_pwa, current_transition_map, current_out_map);
+
+      // If we got here, solve was successful!
+      return lyap;
+
+    } catch (...) {
+      log_info("LP infeasible, refining polygon map");
+
+      // TODO Adjust current_pwa, current_transition_map, current_out_map. New
+      // PWA is same affine maps over polygons of current_transition_map and
+      // current_out_map, new transition/out map computed by
+      // compute_transition_map
+      
+      // Construct new PWA using polygons of transition map
+      PWAFunc new_pwa;
+      for (auto& pair : current_transition_map) {
+        unsigned int i = pair.first.first;  
+
+        // X_{ij} experiences X_i dynamics
+        new_pwa.push_back(std::make_pair(pair.second, current_pwa[i].second));
+      }
+
+      for (auto& pair : current_out_map) {
+        unsigned int i = pair.first;
+
+        for (auto& poly : pair.second) {
+          // \Omega_{ip} experiences X_i dynamics
+          new_pwa.push_back(std::make_pair(poly, current_pwa[i].second));
+        }
+      }
+
+      auto new_transition_map_pair = compute_transition_map(new_pwa);
+      plot_transition_map(new_transition_map_pair, new_pwa);
+
+      current_pwa = new_pwa;
+      current_transition_map = new_transition_map_pair.first;
+      current_out_map = new_transition_map_pair.second;
+    }
+  }
+
+  throw std::runtime_error("Could not solve Lyapunov LP within maximum iterations");
 }
 
 double cannon::research::parl::evaluate_lyap(std::vector<LyapunovComponent> lyap,

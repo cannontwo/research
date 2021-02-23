@@ -2,105 +2,6 @@
 
 using namespace cannon::research::parl;
 
-std::map<std::pair<unsigned int, unsigned int>, Polygon_2> 
-    cannon::research::parl::compute_transition_map(std::shared_ptr<Parl> parl, VD diagram) {
-
-  auto voronoi_polygons = create_bounded_voronoi_polygons(parl, diagram);
-  log_info("Voronoi diagram has", voronoi_polygons.size(), "bounded polygons");
-
-  std::map<unsigned int, std::tuple<Polygon_2, Polygon_2, Polygon_2>> sat_voronoi_polygons;
-  for (auto& pair : voronoi_polygons) {
-    log_info("Checking saturation of region", pair.first);
-
-    //Polygon_2 new_linear_poly, min_sat_poly, max_sat_poly;
-    //std::tie(new_linear_poly, min_sat_poly, max_sat_poly) =
-    //  get_saturated_polygons(pair.second, parl->get_K_matrix_idx_(pair.first),
-    //      parl->get_k_vector_idx_(pair.first)[0]);
-
-    sat_voronoi_polygons[pair.first] = get_saturated_polygons(pair.second,
-        parl->get_K_matrix_idx_(pair.first),
-        parl->get_k_vector_idx_(pair.first)[0]);
-  }
-
-  auto dynamics = parl->get_controlled_system();
-  auto min_sat_dynamics = parl->get_min_sat_controlled_system();
-  auto max_sat_dynamics = parl->get_max_sat_controlled_system();
- 
-  // Compute transition map
-  std::map<std::pair<unsigned int, unsigned int>, Polygon_2> transition_map;
-  for (auto const& pair : sat_voronoi_polygons) {
-    unsigned int i = pair.first;
-
-    // If the dynamics are not invertible, we can't compute a transition map for this region
-    // TODO Should the transition map just be the whole region? This represents
-    // a lack of data in this region, so it's not clear what the correct
-    // approach is.
-    if (dynamics[i].A_.determinant() == 0) 
-      continue;
-
-    Polygon_2 linear_poly, min_sat_poly, max_sat_poly;
-    std::tie(linear_poly, min_sat_poly, max_sat_poly) = sat_voronoi_polygons[pair.first];
-    for (auto& pair2 : voronoi_polygons) {
-      unsigned int j = pair2.first;
-      std::vector<Polygon_2> premap_polys;
-
-      if (min_sat_poly.size() != 0) {
-        // Handle min sat poly 
-        Polygon_2 original_set =  compute_premap_set(min_sat_poly,
-            pair2.second, min_sat_dynamics[i]);
-
-        if (original_set.size() != 0) {
-          premap_polys.push_back(original_set);
-        }
-      }
-
-      if (max_sat_poly.size() != 0) {
-        // Handle max sat poly
-        Polygon_2 original_set =  compute_premap_set(max_sat_poly,
-            pair2.second, max_sat_dynamics[i]);
-
-        if (original_set.size() != 0) {
-          premap_polys.push_back(original_set);
-        }
-      }
-
-      if (linear_poly.size() != 0) {
-        Polygon_2 original_set =  compute_premap_set(linear_poly, pair2.second, dynamics[i]);
-
-        if (original_set.size() != 0) {
-          premap_polys.push_back(original_set);
-        }
-      }
-
-      if (premap_polys.size() > 0) {
-        if (premap_polys.size() == 1) {
-          transition_map.insert(std::make_pair(std::make_pair(i, j), premap_polys[0]));
-        } else {
-          Polygon_2 premap_union;
-          Polygon_with_holes_2 tmp_union;
-
-          // premap_polys either has size 2 or 3, via if statements above
-          CGAL::join(premap_polys[0], premap_polys[1], tmp_union);
-
-          if (premap_polys.size() == 3) {
-            Polygon_with_holes_2 tmp_union_2(tmp_union);
-            CGAL::join(tmp_union_2, premap_polys[2], tmp_union);
-          }
-
-          // Since the map is continuous within each Voronoi region, there should
-          // be no holes and we can just take the outer boundary
-          assert(tmp_union.number_of_holes() == 0);
-          premap_union = tmp_union.outer_boundary();
-          transition_map.insert(std::make_pair(std::make_pair(i, j), premap_union));
-        }
-      }
-
-    } // for (pair2)
-  } // for (pair)
-
-  return transition_map;
-}
-
 std::pair<std::map<std::pair<unsigned int, unsigned int>, Polygon_2>,
   std::map<unsigned int, std::vector<Polygon_2>>> cannon::research::parl::compute_transition_map(const
       std::vector<std::pair<Polygon_2, AutonomousLinearParams>>& pwa_func) {
@@ -372,8 +273,11 @@ Polygon_2 cannon::research::parl::compute_premap_set(const Polygon_2& map_poly,
   std::vector<Polygon_with_holes_2> intersection_polys;
   CGAL::intersection(trans_poly, test_poly,
       std::back_inserter(intersection_polys));
-
-  // For intersections of voronoi polygons, all regions should be convex
+  
+  // TODO Remove this assertion, just handle all generated polygons and return
+  // vector. Transition map and out map probably need to be switched to
+  // multimaps. For higher order transition maps, commonly have multiple
+  // polygons in transition set. They still shouldn't have holes.
   assert(intersection_polys.size() == 0 || intersection_polys.size() == 1);
 
   Polygon_2 original_set;
@@ -509,4 +413,30 @@ bool cannon::research::parl::is_inside(const Vector2d& state, const Polygon_2& p
     case CGAL::ON_UNBOUNDED_SIDE:
       return false;
   }  
+}
+
+void cannon::research::parl::plot_transition_map(const std::pair<TransitionMap, OutMap>&
+    transition_map_pair, const PWAFunc& pwa_func) {
+  Plotter p;
+
+  for (auto const& pair : transition_map_pair.first) {
+    float hue_1 = pair.first.first  * (360.0 / (float)pwa_func.size()); 
+    float hue_2 = pair.first.second * (360.0 / (float)pwa_func.size());
+    auto rgb = hsv_to_rgb((hue_1 + hue_2) / 2.0, 0.75, 0.9);
+    Vector4f color = Vector4f::Ones();
+    color.head(3) = rgb;
+    p.plot_polygon(pair.second, color);
+  }
+
+
+  for (auto const& pair : transition_map_pair.second) {
+    float hue = pair.first  * (360.0 / (float)pwa_func.size()); 
+    Vector4f color = Vector4f::Ones();
+    auto rgb = hsv_to_rgb(hue, 0.75, 0.25);
+    color.head(3) = rgb;
+    for (auto const& poly : pair.second) {
+      p.plot_polygon(poly, color);
+    }
+  }
+  p.render();
 }

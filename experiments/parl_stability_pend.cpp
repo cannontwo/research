@@ -47,7 +47,6 @@ int main() {
   auto diagram = compute_voronoi_diagram(r.get_agent());
 
   // Create transition map using CGAL polygon affine mapping
-  //auto transition_map = compute_transition_map(r.get_agent(), diagram);
   auto parl_pwa_func = compute_parl_pwa_func(r.get_agent(), diagram);
 
   auto transition_map_pair = compute_transition_map(parl_pwa_func);
@@ -82,7 +81,10 @@ int main() {
 
   // TODO Formulate and solve iterative LP giving Lyapunov function
   // (https://ieeexplore.ieee.org/document/6426761)
-  auto lyap = attempt_lp_solve(parl_pwa_func, transition_map_pair.first,
+  //auto lyap = attempt_lp_solve(parl_pwa_func, transition_map_pair.first,
+  //    transition_map_pair.second);
+  
+  auto lyap = find_lyapunov(parl_pwa_func, transition_map_pair.first,
       transition_map_pair.second);
 
   Vector2d zero = Vector2d::Zero();
