@@ -2,9 +2,9 @@
 
 using namespace cannon::research::parl;
 
-std::vector<LyapunovComponent> cannon::research::parl::attempt_lp_solve(const
-    PWAFunc& pwa, const TransitionMap& transition_map, const OutMap& out_map,
-    double M, double eps) {
+std::pair<std::vector<LyapunovComponent>, double>
+cannon::research::parl::attempt_lp_solve(const PWAFunc& pwa, const
+    TransitionMap& transition_map, const OutMap& out_map, double M, double eps) {
 
   // var[0] is \alpha_1, var[1] is \alpha_3, var[2] is \theta
   // var[3*i + 3] is F_i[0], var[3*i + 4] is F_i[1], var[3*i + 5] is g_i
@@ -79,33 +79,35 @@ std::vector<LyapunovComponent> cannon::research::parl::attempt_lp_solve(const
   for (auto& pair : transition_map) {
     unsigned int i, j;
     std::tie(i, j) = pair.first;
-    for (auto it = pair.second.vertices_begin(); it < pair.second.vertices_end(); it++) {
-      RowVectorXd lhs_mat = VectorXd::Zero(num_vars);
-      Vector2d vertex = Vector2d::Zero();
-      vertex[0] = CGAL::to_double(it->x());
-      vertex[1] = CGAL::to_double(it->y());
+    for (auto& poly : pair.second) {
+      for (auto it = poly.vertices_begin(); it < poly.vertices_end(); it++) {
+        RowVectorXd lhs_mat = VectorXd::Zero(num_vars);
+        Vector2d vertex = Vector2d::Zero();
+        vertex[0] = CGAL::to_double(it->x());
+        vertex[1] = CGAL::to_double(it->y());
 
-      // F_j * (A_i v_{ij, h} + a_i) term
-      Vector2d interior = pwa[i].second.A_ * vertex + pwa[i].second.c_;
-      lhs_mat[3*j + 3] = interior[0];
-      lhs_mat[3*j + 4] = interior[1];
+        // F_j * (A_i v_{ij, h} + a_i) term
+        Vector2d interior = pwa[i].second.A_ * vertex + pwa[i].second.c_;
+        lhs_mat[3*j + 3] = interior[0];
+        lhs_mat[3*j + 4] = interior[1];
 
-      // g_j term
-      lhs_mat[3*j + 5] = 1.0;
+        // g_j term
+        lhs_mat[3*j + 5] = 1.0;
 
-      // -F_i v_{ij,h} term
-      lhs_mat[3*i + 3] = -vertex[0];
-      lhs_mat[3*i + 4] = -vertex[1];
+        // -F_i v_{ij,h} term
+        lhs_mat[3*i + 3] = -vertex[0];
+        lhs_mat[3*i + 4] = -vertex[1];
 
-      // -g_i term
-      lhs_mat[3*i + 5] = -1.0;
+        // -g_i term
+        lhs_mat[3*i + 5] = -1.0;
 
-      // \alpha_3 term
-      lhs_mat[1] = std::sqrt(std::pow(vertex[0], 2) + std::pow(vertex[1], 2));
+        // \alpha_3 term
+        lhs_mat[1] = std::sqrt(std::pow(vertex[0], 2) + std::pow(vertex[1], 2));
 
-      VectorXd rhs = VectorXd::Zero(1);
+        VectorXd rhs = VectorXd::Zero(1);
 
-      opt.add_constraint(lhs_mat, rhs);
+        opt.add_constraint(lhs_mat, rhs);
+      }
     }
   }
   
@@ -151,13 +153,14 @@ std::vector<LyapunovComponent> cannon::research::parl::attempt_lp_solve(const
     lyap.push_back(component);
   }
 
-  return lyap;
+  return std::make_pair(lyap, result.solution[2]);
     
 }
 
-std::vector<LyapunovComponent> cannon::research::parl::find_lyapunov(const
-    PWAFunc& pwa, const TransitionMap& initial_transition_map, const OutMap&
-    initial_out_map, unsigned int max_iters) {
+std::tuple<std::vector<LyapunovComponent>, PWAFunc, double>
+cannon::research::parl::find_lyapunov(const PWAFunc& pwa, const TransitionMap&
+    initial_transition_map, const OutMap& initial_out_map, unsigned int
+    max_iters) {
 
   auto current_pwa = pwa;
   auto current_transition_map = initial_transition_map;
@@ -165,45 +168,47 @@ std::vector<LyapunovComponent> cannon::research::parl::find_lyapunov(const
 
   for (unsigned int i = 0; i < max_iters; i++) {
     try {
-      log_info("On iteration", i, "attempting to solve LP for PWA func with", pwa.size(), "regions");
-      auto lyap = attempt_lp_solve(current_pwa, current_transition_map, current_out_map);
+      log_info("On iteration", i, "attempting to solve LP for PWA func with", current_pwa.size(), "regions");
+
+      std::vector<LyapunovComponent> lyap;
+      double theta;
+      std::tie(lyap, theta) = attempt_lp_solve(current_pwa, current_transition_map, current_out_map);
+
+      log_info("LP solved with theta=", theta);
 
       // If we got here, solve was successful!
-      return lyap;
+      return std::make_tuple(lyap, current_pwa, theta);
 
     } catch (...) {
       log_info("LP infeasible, refining polygon map");
-
-      // TODO Adjust current_pwa, current_transition_map, current_out_map. New
-      // PWA is same affine maps over polygons of current_transition_map and
-      // current_out_map, new transition/out map computed by
-      // compute_transition_map
-      
-      // Construct new PWA using polygons of transition map
-      PWAFunc new_pwa;
-      for (auto& pair : current_transition_map) {
-        unsigned int i = pair.first.first;  
-
-        // X_{ij} experiences X_i dynamics
-        new_pwa.push_back(std::make_pair(pair.second, current_pwa[i].second));
-      }
-
-      for (auto& pair : current_out_map) {
-        unsigned int i = pair.first;
-
-        for (auto& poly : pair.second) {
-          // \Omega_{ip} experiences X_i dynamics
-          new_pwa.push_back(std::make_pair(poly, current_pwa[i].second));
-        }
-      }
-
-      auto new_transition_map_pair = compute_transition_map(new_pwa);
-      plot_transition_map(new_transition_map_pair, new_pwa);
-
-      current_pwa = new_pwa;
-      current_transition_map = new_transition_map_pair.first;
-      current_out_map = new_transition_map_pair.second;
     }
+
+    // Construct new PWA using polygons of transition map
+    PWAFunc new_pwa;
+    for (auto& pair : current_transition_map) {
+      unsigned int i = pair.first.first;  
+
+      for (auto& poly : pair.second) {
+        // X_{ij} experiences X_i dynamics
+        new_pwa.push_back(std::make_pair(poly, current_pwa[i].second));
+      }
+    }
+
+    for (auto& pair : current_out_map) {
+      unsigned int i = pair.first;
+
+      for (auto& poly : pair.second) {
+        // \Omega_{ip} experiences X_i dynamics
+        new_pwa.push_back(std::make_pair(poly, current_pwa[i].second));
+      }
+    }
+
+    auto new_transition_map_pair = compute_transition_map(new_pwa);
+    plot_transition_map(new_transition_map_pair, new_pwa);
+
+    current_pwa = new_pwa;
+    current_transition_map = new_transition_map_pair.first;
+    current_out_map = new_transition_map_pair.second;
   }
 
   throw std::runtime_error("Could not solve Lyapunov LP within maximum iterations");

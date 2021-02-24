@@ -19,8 +19,7 @@ using namespace cannon::graphics;
 
 
 bool check_state_transition(const std::vector<std::pair<Polygon_2,
-    AutonomousLinearParams>>& pwa_func, const std::map<std::pair<unsigned int,
-    unsigned int>, Polygon_2>& transition_map, const Vector2d& test_state) {
+    AutonomousLinearParams>>& pwa_func, const TransitionMap& transition_map, const Vector2d& test_state) {
 
   for (unsigned int i = 0; i < pwa_func.size(); i++) {
     auto pair = pwa_func[i];
@@ -70,11 +69,7 @@ int main() {
 
   log_info("Computed transition map with", transition_map.first.size(), "elements");
 
-  Plotter p;
-  for (auto const& pair : transition_map.first) {
-    p.plot_polygon(pair.second, generate_random_color());
-  }
-  p.render();
+  plot_transition_map(transition_map, parl_pwa_func);
 
   unsigned int num_verified = 0;
   const unsigned int GRID_SIZE = 200;

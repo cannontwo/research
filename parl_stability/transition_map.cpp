@@ -2,14 +2,13 @@
 
 using namespace cannon::research::parl;
 
-std::pair<std::map<std::pair<unsigned int, unsigned int>, Polygon_2>,
-  std::map<unsigned int, std::vector<Polygon_2>>> cannon::research::parl::compute_transition_map(const
+std::pair<TransitionMap, OutMap> cannon::research::parl::compute_transition_map(const
       std::vector<std::pair<Polygon_2, AutonomousLinearParams>>& pwa_func) {
 
   log_info("Computing transition map for PWA system with", pwa_func.size(), "regions");
 
-  std::map<std::pair<unsigned int, unsigned int>, Polygon_2> transition_map;
-  std::map<unsigned int, std::vector<Polygon_2>> out_of_bounds_polys;
+  TransitionMap transition_map;
+  OutMap out_of_bounds_polys;
   for (unsigned int i = 0; i < pwa_func.size(); i++) {
     // If the dynamics are not invertible, we can't compute a transition map for this region
     // TODO Should the transition map just be the whole region? This represents
@@ -23,21 +22,29 @@ std::pair<std::map<std::pair<unsigned int, unsigned int>, Polygon_2>,
     for (unsigned int j = 0; j < pwa_func.size(); j++) {
       auto pair2 = pwa_func[j];
 
-      // Handle min sat poly 
-      Polygon_2 premap_set =  compute_premap_set(pair.first, pair2.first,
+      std::vector<Polygon_2> premap_set = compute_premap_set(pair.first, pair2.first,
           pair.second);
 
-      if (premap_set.size() != 0) {
-        if (premap_set.orientation() != CGAL::COUNTERCLOCKWISE) {
-          premap_set.reverse_orientation();
-        }
-        transition_map.insert(std::make_pair(std::make_pair(i, j), premap_set));
+      std::vector<Polygon_2> poly_vec;
 
-        if (premap_union.is_empty())
-          premap_union.insert(premap_set);
-        else {
-          premap_union.join(premap_set);
+      for (auto& poly : premap_set) {
+        if (poly.size() != 0) {
+          if (poly.orientation() != CGAL::COUNTERCLOCKWISE) {
+            poly.reverse_orientation();
+          }
+
+          poly_vec.push_back(poly);
+
+          if (premap_union.is_empty())
+            premap_union.insert(poly);
+          else {
+            premap_union.join(poly);
+          }
         }
+      }
+
+      if (poly_vec.size() != 0) {
+        transition_map.insert(std::make_pair(std::make_pair(i, j), poly_vec));
       }
     }
 
@@ -257,7 +264,7 @@ std::pair<Polygon_2, Transformation> cannon::research::parl::affine_map_polygon(
   return std::make_pair(ret_poly, aff_trans.inverse());
 }
 
-Polygon_2 cannon::research::parl::compute_premap_set(const Polygon_2& map_poly,
+std::vector<Polygon_2> cannon::research::parl::compute_premap_set(const Polygon_2& map_poly,
     const Polygon_2& test_poly, const AutonomousLinearParams& map) {
 
   std::pair<Polygon_2, Transformation> transformed_poly_pair =
@@ -278,19 +285,17 @@ Polygon_2 cannon::research::parl::compute_premap_set(const Polygon_2& map_poly,
   // vector. Transition map and out map probably need to be switched to
   // multimaps. For higher order transition maps, commonly have multiple
   // polygons in transition set. They still shouldn't have holes.
-  assert(intersection_polys.size() == 0 || intersection_polys.size() == 1);
 
-  Polygon_2 original_set;
-  if (intersection_polys.size() == 1) {
-    // There shouldn't be any holes for Voronoi regions
-    assert(intersection_polys[0].number_of_holes() == 0);
-    Polygon_2 intersection_poly = intersection_polys[0].outer_boundary();
+  std::vector<Polygon_2> ret_vec;
+  for (auto& poly : intersection_polys) {
+    assert(poly.number_of_holes() == 0);
 
-    original_set = CGAL::transform(transformed_poly_pair.second,
-        intersection_poly);
+    Polygon_2 intersection_poly = poly.outer_boundary();
+    ret_vec.push_back(CGAL::transform(transformed_poly_pair.second,
+          intersection_poly));
   }
 
-  return original_set;
+  return ret_vec;
 }
 
 std::tuple<Polygon_2, Polygon_2, Polygon_2>
@@ -416,7 +421,7 @@ bool cannon::research::parl::is_inside(const Vector2d& state, const Polygon_2& p
 }
 
 void cannon::research::parl::plot_transition_map(const std::pair<TransitionMap, OutMap>&
-    transition_map_pair, const PWAFunc& pwa_func) {
+    transition_map_pair, const PWAFunc& pwa_func, bool save) {
   Plotter p;
 
   for (auto const& pair : transition_map_pair.first) {
@@ -425,7 +430,10 @@ void cannon::research::parl::plot_transition_map(const std::pair<TransitionMap, 
     auto rgb = hsv_to_rgb((hue_1 + hue_2) / 2.0, 0.75, 0.9);
     Vector4f color = Vector4f::Ones();
     color.head(3) = rgb;
-    p.plot_polygon(pair.second, color);
+    //p.plot_polygon(pair.second, color);
+    for (auto const& poly : pair.second) {
+      p.plot_polygon(poly, generate_random_color());
+    }
   }
 
 
@@ -435,8 +443,17 @@ void cannon::research::parl::plot_transition_map(const std::pair<TransitionMap, 
     auto rgb = hsv_to_rgb(hue, 0.75, 0.25);
     color.head(3) = rgb;
     for (auto const& poly : pair.second) {
-      p.plot_polygon(poly, color);
+      //p.plot_polygon(poly, color);
+      p.plot_polygon(poly, generate_random_color());
     }
   }
-  p.render();
+  
+  if (save) {
+    std::filesystem::create_directory("img");
+    std::string path("img/transition_map_");
+    path += std::to_string(glfwGetTime()) + std::string(".png");
+    p.save_image(path);
+  } else {
+    p.render();
+  }
 }

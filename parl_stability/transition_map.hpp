@@ -2,6 +2,7 @@
 #define CANNON_RESEARCH_PARL_STABILITY_TRANSITION_MAP_H 
 
 #include <vector>
+#include <filesystem>
 
 #include <CGAL/Polygon_2.h>
 #include <CGAL/Aff_transformation_2.h>
@@ -30,22 +31,19 @@ using Vertex_const_handle = Nef_polyhedron::Explorer::Vertex_const_handle;
 using namespace cannon::plot;
 using namespace cannon::graphics;
 
-
 namespace cannon {
   namespace research {
     namespace parl {
 
       using PWAFunc = std::vector<std::pair<Polygon_2, AutonomousLinearParams>>;
-      using TransitionMap = std::map<std::pair<unsigned int, unsigned int>, Polygon_2>;
+      using TransitionMap = std::map<std::pair<unsigned int, unsigned int>, std::vector<Polygon_2>>;
       using OutMap = std::map<unsigned int, std::vector<Polygon_2>>;
 
       /*!
        * Compute transition map of the input PWA system.
        */
-      std::pair<std::map<std::pair<unsigned int, unsigned int>, Polygon_2>,
-        std::map<unsigned int, std::vector<Polygon_2>>> compute_transition_map(const
-            std::vector<std::pair<Polygon_2, AutonomousLinearParams>>&
-            pwa_func);
+      std::pair<TransitionMap, OutMap> compute_transition_map(const
+          std::vector<std::pair<Polygon_2, AutonomousLinearParams>>& pwa_func);
 
       /*!
        * Compute the effective PWA controlled system represented by a PARL
@@ -99,9 +97,9 @@ namespace cannon {
        * \param test_poly The polygon to test intersection against.
        * \param map The affine map to apply to map_poly.
        *
-       * \returns The preimage of the intersection of map(map_poly) and test_poly.
+       * \returns A vector of preimage polygons of the intersection of map(map_poly) and test_poly.
        */
-      Polygon_2 compute_premap_set(const Polygon_2& map_poly, const Polygon_2&
+      std::vector<Polygon_2> compute_premap_set(const Polygon_2& map_poly, const Polygon_2&
           test_poly, const AutonomousLinearParams& map);
 
       /*!
@@ -147,7 +145,7 @@ namespace cannon {
        * \param pwa_func The PWA function over which the transition map is defined
        */
       void plot_transition_map(const std::pair<TransitionMap, OutMap>&
-          transition_map_pair, const PWAFunc& pwa_func);
+          transition_map_pair, const PWAFunc& pwa_func, bool save=true);
 
     } // namespace parl
   } // namespace research
