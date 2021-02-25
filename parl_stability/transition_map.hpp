@@ -13,6 +13,9 @@
 #include <CGAL/Extended_cartesian.h>
 #include <CGAL/Polygon_set_2.h>
 
+#include <Eigen/Dense>
+#include <thirdparty/HighFive/include/highfive/H5Easy.hpp>
+
 #include <cannon/research/parl_stability/voronoi.hpp>
 #include <cannon/plot/plotter.hpp>
 #include <cannon/graphics/random_color.hpp>
@@ -138,7 +141,7 @@ namespace cannon {
        */
       bool is_inside(const Vector2d& state, const Polygon_2& poly);
 
-      /**
+      /*!
        * Plot transition map and display plot.
        *
        * \param transition_map_pair The transition map to plot.
@@ -146,6 +149,37 @@ namespace cannon {
        */
       void plot_transition_map(const std::pair<TransitionMap, OutMap>&
           transition_map_pair, const PWAFunc& pwa_func, bool save=true);
+
+      /*!
+       * Save a PWA function to an HDF5 file. 
+       *
+       * The structure of the stored data is as follows:
+       *
+       * /polygons/i - Polygon information, stored as a vector of points
+       *               assumed to be in CCW order, with an entry for each region.
+       * /A_mats/i - Linear portions of autonomous system dynamics.
+       * /c_vecs/i - Offset portions of autonomous system dynamics.
+       *
+       * \param pwa The PWA function to save.
+       * \param path The file path to save it to.
+       */
+      void save_pwa(const PWAFunc& pwa, const std::string& path);
+
+      /*!
+       * Load a PWA function from an HDF5 file. 
+       *
+       * The structure of the stored data is as follows:
+       *
+       * /polygons/i - Polygon information, stored as a vector of points
+       *               assumed to be in CCW order, with an entry for each region.
+       * /A_mats/i - Linear portions of autonomous system dynamics.
+       * /c_vecs/i - Offset portions of autonomous system dynamics.
+       *
+       * \param path The file path to save it to.
+       *
+       * \return The loaded PWA function.
+       */
+      PWAFunc load_pwa(const std::string& path);
 
     } // namespace parl
   } // namespace research

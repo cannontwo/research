@@ -18,7 +18,6 @@ using namespace cannon::research::parl;
 using namespace cannon::plot;
 using namespace cannon::graphics;
 
-
 bool check_state_transition(const std::vector<std::pair<Polygon_2,
     AutonomousLinearParams>>& pwa_func, const TransitionMap& transition_map, const Vector2d& test_state) {
 

@@ -380,7 +380,10 @@ Polygon_2 cannon::research::parl::extract_finite_face_polygon(const Nef_polyhedr
     if (!found_infinite) {
       // This could be the finite face we're looking for
       Hole_const_iterator hit = e.holes_begin(fit), end = e.holes_end(fit); 
-      assert(hit == end); // We should not have any holes for Voronoi regions under affine maps
+      if (hit != end) { 
+        // We should not have any holes for Voronoi regions under affine maps
+        throw std::runtime_error("Expected a simple face, but found a hole.");
+      }
 
       // Loop back over halfedges and construct polygon
       do {
@@ -416,6 +419,8 @@ bool cannon::research::parl::is_inside(const Vector2d& state, const Polygon_2& p
     case CGAL::ON_BOUNDARY:
       return true;
     case CGAL::ON_UNBOUNDED_SIDE:
+      return false;
+    default:
       return false;
   }  
 }
@@ -456,4 +461,72 @@ void cannon::research::parl::plot_transition_map(const std::pair<TransitionMap, 
   } else {
     p.render();
   }
+
+  p.close();
+}
+
+void cannon::research::parl::save_pwa(const PWAFunc& pwa, const std::string& path) {
+  H5Easy::File file(path, H5Easy::File::Overwrite);
+  std::string polygon_path("/polygons/");
+  std::string A_path("/A_mats/");
+  std::string c_path("/c_vecs/");
+
+  log_info("Saving PWA model with", pwa.size(), "regions");
+
+  for (unsigned int i = 0; i < pwa.size(); i++) {
+    std::vector<Vector2d> poly_vec;
+    for (auto it = pwa[i].first.vertices_begin(); it < pwa[i].first.vertices_end(); it++) {
+      Vector2d vec = Vector2d::Zero();
+      vec[0] = CGAL::to_double(it->x());
+      vec[1] = CGAL::to_double(it->y());
+
+      poly_vec.push_back(vec);
+    }
+
+
+    H5Easy::dump(file, polygon_path + std::to_string(i), poly_vec);
+    H5Easy::dump(file, A_path + std::to_string(i), pwa[i].second.A_);
+    H5Easy::dump(file, c_path + std::to_string(i), pwa[i].second.c_);
+  }
+
+  file.flush();
+}
+
+PWAFunc cannon::research::parl::load_pwa(const std::string& path) {
+  PWAFunc ret_pwa;
+
+  H5Easy::File file(path, H5Easy::File::ReadOnly);
+
+  auto polygon_group = file.getGroup("/polygons");
+  auto A_group = file.getGroup("/A_mats");
+  auto c_group = file.getGroup("/c_vecs");
+  log_info("/polygons group has", polygon_group.getNumberObjects(), "objects");
+
+  assert(polygon_group.getNumberObjects() == A_group.getNumberObjects());
+  assert(polygon_group.getNumberObjects() == c_group.getNumberObjects());
+
+  std::string polygon_path("/polygons/");
+  std::string A_path("/A_mats/");
+  std::string c_path("/c_vecs/");
+
+  for (unsigned int i = 0; i < polygon_group.getNumberObjects(); i++) {
+
+    // Read polygon for region i
+    std::vector<Vector2d> poly_vec = H5Easy::load<std::vector<Vector2d>>(file, polygon_path + std::to_string(i));
+    Polygon_2 poly;
+    for (unsigned int i = 0; i < poly_vec.size(); i++) {
+      Vector2d eig_p = poly_vec[i];
+      K::Point_2 p(eig_p[0], eig_p[1]);
+      poly.push_back(p);
+    }
+
+    // Read autonomous dynamics for region i
+    MatrixXd A = H5Easy::load<MatrixXd>(file, A_path + std::to_string(i));
+    VectorXd c = H5Easy::load<VectorXd>(file, c_path + std::to_string(i));
+    AutonomousLinearParams dynamics(A, c, 0);
+
+    ret_pwa.push_back(std::make_pair(poly, dynamics));
+  }
+
+  return ret_pwa;
 }

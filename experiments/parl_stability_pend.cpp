@@ -88,7 +88,7 @@ int main() {
   PWAFunc refined_pwa;
   double theta;
   std::tie(lyap, refined_pwa, theta) = find_lyapunov(parl_pwa_func, transition_map_pair.first,
-      transition_map_pair.second);
+      transition_map_pair.second, 4);
 
   unsigned int num_lower_regions = 0;
   Plotter p;

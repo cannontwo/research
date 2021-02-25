@@ -89,11 +89,11 @@ namespace cannon {
 
         // Copy constructor
         AutonomousLinearParams(const AutonomousLinearParams& o) : A_(o.A_), c_(o.c_),
-        num_data_(o.num_data_), state_dim_(o.state_dim_), action_dim_(o.action_dim_) {}
+        num_data_(o.num_data_), state_dim_(o.state_dim_) {}
 
         // Move constructor
         AutonomousLinearParams(AutonomousLinearParams&& o) : A_(std::move(o.A_)), c_(std::move(o.c_)),
-        num_data_(o.num_data_), state_dim_(o.state_dim_), action_dim_(o.action_dim_) {}
+        num_data_(o.num_data_), state_dim_(o.state_dim_) {}
 
         // Copy Assignment
         AutonomousLinearParams& operator=(const AutonomousLinearParams& o) {
@@ -101,7 +101,6 @@ namespace cannon {
           c_ = o.c_;
           num_data_ = o.num_data_;
           state_dim_ = o.state_dim_;
-          action_dim_ = o.action_dim_;
 
           return *this;
         }
@@ -121,8 +120,8 @@ namespace cannon {
           num_data_ = num_data;
         }
 
-        AutonomousLinearParams(unsigned int state_dim, unsigned int action_dim) :
-          state_dim_(state_dim), action_dim_(action_dim)  {
+        AutonomousLinearParams(unsigned int state_dim) :
+          state_dim_(state_dim) {
 
           A_ = MatrixXd::Zero(state_dim_, state_dim_);
           c_ = VectorXd::Zero(state_dim_);
@@ -132,7 +131,6 @@ namespace cannon {
         // Merge another LinearParams object via data-weighted averaging
         void merge(const AutonomousLinearParams& o) {
           assert(o.state_dim_ == state_dim_);
-          assert(o.action_dim_ == action_dim_);
 
           unsigned int total_datapoints = o.num_data_ + num_data_;
           double t = (double)num_data_ / (double)total_datapoints;
@@ -148,7 +146,6 @@ namespace cannon {
         unsigned int num_data_;
 
         unsigned int state_dim_;
-        unsigned int action_dim_;
       };
 
     } // namespace parl
