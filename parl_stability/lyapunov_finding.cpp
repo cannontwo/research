@@ -177,6 +177,13 @@ cannon::research::parl::find_lyapunov(const PWAFunc& pwa, const TransitionMap&
       log_info("LP solved with theta=", theta);
 
       // If we got here, solve was successful!
+
+      // Store found Lyapunov function
+      std::filesystem::create_directory("models");
+      save_lyap(lyap, theta, std::string("models/lyap_") +
+          std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())
+          + std::string(".h5"));
+
       return std::make_tuple(lyap, current_pwa, theta);
 
     } catch (...) {
@@ -214,8 +221,14 @@ cannon::research::parl::refine_pwa(const PWAFunc& pwa, const TransitionMap&
       }
     }
 
+    // Store refined PWA function
+    std::filesystem::create_directory("models");
+    save_pwa(new_pwa, std::string("models/pwa_") +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())
+        + std::string(".h5"));
+
     auto new_transition_map_pair = compute_transition_map(new_pwa);
-    plot_transition_map(new_transition_map_pair, new_pwa);
+    //plot_transition_map(new_transition_map_pair, new_pwa);
 
     return std::make_tuple(new_pwa, new_transition_map_pair.first, new_transition_map_pair.second);
 }
@@ -237,4 +250,76 @@ double cannon::research::parl::evaluate_lyap(std::vector<LyapunovComponent> lyap
   }
 
   return value;
+}
+
+void cannon::research::parl::save_lyap(std::vector<LyapunovComponent>& lyap, double theta,
+    const std::string& path) {
+  H5Easy::File file(path, H5Easy::File::Overwrite);
+  std::string polygon_path("/polygons/");
+  std::string linear_path("/linear/");
+  std::string affine_path("/affine/");
+
+  log_info("Saving Lyapunov function with", lyap.size(), "components");
+
+  for (unsigned int i = 0; i < lyap.size(); i++) {
+    std::vector<Vector2d> poly_vec;
+    for (auto it = lyap[i].poly_.vertices_begin(); it < lyap[i].poly_.vertices_end(); it++) {
+      Vector2d vec = Vector2d::Zero();
+      vec[0] = CGAL::to_double(it->x());
+      vec[1] = CGAL::to_double(it->y());
+
+      poly_vec.push_back(vec);
+    }
+
+    H5Easy::dump(file, polygon_path + std::to_string(i), poly_vec);
+    H5Easy::dump(file, linear_path + std::to_string(i), lyap[i].linear_part_);
+    H5Easy::dump(file, affine_path + std::to_string(i), lyap[i].affine_part_);
+  }
+
+  H5Easy::dump(file, "/theta", theta);
+
+  file.flush();
+}
+
+std::pair<std::vector<LyapunovComponent>, double>
+cannon::research::parl::load_lyap(const std::string& path) {
+  std::vector<LyapunovComponent> ret_lyap;
+
+  H5Easy::File file(path, H5Easy::File::ReadOnly);
+
+  auto polygon_group = file.getGroup("/polygons");
+  auto linear_group = file.getGroup("/linear");
+  auto affine_group = file.getGroup("/affine");
+
+  log_info("/polygons group has", polygon_group.getNumberObjects(), "objects");
+
+  assert(polygon_group.getNumberObjects() == linear_group.getNumberObjects());
+  assert(polygon_group.getNumberObjects() == affine_group.getNumberObjects());
+
+  std::string polygon_path("/polygons/");
+  std::string linear_path("/linear/");
+  std::string affine_path("/affine/");
+
+  for (unsigned int i = 0; i < polygon_group.getNumberObjects(); i++) {
+
+    // Read polygon for region i
+    std::vector<Vector2d> poly_vec = H5Easy::load<std::vector<Vector2d>>(file, polygon_path + std::to_string(i));
+    Polygon_2 poly;
+    for (unsigned int i = 0; i < poly_vec.size(); i++) {
+      Vector2d eig_p = poly_vec[i];
+      K::Point_2 p(eig_p[0], eig_p[1]);
+      poly.push_back(p);
+    }
+
+    // Read Lyapunov function parameters for region i
+    RowVectorXd linear = H5Easy::load<RowVectorXd>(file, linear_path + std::to_string(i));
+    double affine = H5Easy::load<double>(file, affine_path + std::to_string(i));
+
+    LyapunovComponent tmp(poly, linear, affine);
+    ret_lyap.push_back(tmp);
+  }
+
+  double theta = H5Easy::load<double>(file, "/theta");
+
+  return std::make_pair(ret_lyap, theta);
 }

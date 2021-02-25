@@ -1,6 +1,8 @@
 #ifndef CANNON_RESEARCH_PARL_STABILITY_LYAPUNOV_FINDING_H
 #define CANNON_RESEARCH_PARL_STABILITY_LYAPUNOV_FINDING_H 
 
+#include <chrono>
+
 #include <Eigen/Dense>
 
 #include <cannon/research/parl_stability/transition_map.hpp>
@@ -48,6 +50,22 @@ namespace cannon {
           const TransitionMap& transition_map, const OutMap& out_map);
 
       double evaluate_lyap(std::vector<LyapunovComponent> lyap, const Vector2d& query);
+
+      /*!
+       * Saves the input lyapunov function to an HDF5 file with format
+       *
+       * /polygons/i - The polygons over which the lyapunov function is defined
+       * /linear/i - The linear components of the lyapunov function
+       * /affine/i - The affine components of the lyapunov function
+       * /theta - The theta parameter defining an estimate of the PI set for this lyapunov function.
+       */
+      void save_lyap(std::vector<LyapunovComponent>& lyap, double theta, const std::string& path);
+
+      /*
+       * Loads a lyapunov function saved by save_lyap, and returns it and the
+       * theta that defines its associated PI set.
+       */
+      std::pair<std::vector<LyapunovComponent>, double> load_lyap(const std::string& path);
 
     } // namespace parl
   } // namespace research
