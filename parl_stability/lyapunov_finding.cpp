@@ -183,35 +183,41 @@ cannon::research::parl::find_lyapunov(const PWAFunc& pwa, const TransitionMap&
       log_info("LP infeasible, refining polygon map");
     }
 
-    // Construct new PWA using polygons of transition map
+    std::tie(current_pwa, current_transition_map, current_out_map) =
+      refine_pwa(current_pwa, current_transition_map, current_out_map);
+  }
+
+  throw std::runtime_error("Could not solve Lyapunov LP within maximum iterations");
+}
+
+
+std::tuple<PWAFunc, TransitionMap, OutMap>
+cannon::research::parl::refine_pwa(const PWAFunc& pwa, const TransitionMap&
+    transition_map, const OutMap& out_map) {
+
     PWAFunc new_pwa;
-    for (auto& pair : current_transition_map) {
+    for (auto& pair : transition_map) {
       unsigned int i = pair.first.first;  
 
       for (auto& poly : pair.second) {
         // X_{ij} experiences X_i dynamics
-        new_pwa.push_back(std::make_pair(poly, current_pwa[i].second));
+        new_pwa.push_back(std::make_pair(poly, pwa[i].second));
       }
     }
 
-    for (auto& pair : current_out_map) {
+    for (auto& pair : out_map) {
       unsigned int i = pair.first;
 
       for (auto& poly : pair.second) {
         // \Omega_{ip} experiences X_i dynamics
-        new_pwa.push_back(std::make_pair(poly, current_pwa[i].second));
+        new_pwa.push_back(std::make_pair(poly, pwa[i].second));
       }
     }
 
     auto new_transition_map_pair = compute_transition_map(new_pwa);
     plot_transition_map(new_transition_map_pair, new_pwa);
 
-    current_pwa = new_pwa;
-    current_transition_map = new_transition_map_pair.first;
-    current_out_map = new_transition_map_pair.second;
-  }
-
-  throw std::runtime_error("Could not solve Lyapunov LP within maximum iterations");
+    return std::make_tuple(new_pwa, new_transition_map_pair.first, new_transition_map_pair.second);
 }
 
 double cannon::research::parl::evaluate_lyap(std::vector<LyapunovComponent> lyap,

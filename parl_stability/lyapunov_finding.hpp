@@ -44,6 +44,9 @@ namespace cannon {
           TransitionMap& initial_transition_map, const OutMap& initial_out_map,
           unsigned int max_iters=10);
 
+      std::tuple<PWAFunc, TransitionMap, OutMap> refine_pwa(const PWAFunc& pwa,
+          const TransitionMap& transition_map, const OutMap& out_map);
+
       double evaluate_lyap(std::vector<LyapunovComponent> lyap, const Vector2d& query);
 
     } // namespace parl
