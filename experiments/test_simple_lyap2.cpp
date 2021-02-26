@@ -24,30 +24,34 @@ int main() {
   // Create transition map using CGAL polygon affine mapping
   PWAFunc simple_pwa;
 
-  // Example 3.2 of https://ieeexplore.ieee.org/document/1017553
+  // Example 3.3 of https://ieeexplore.ieee.org/document/1017553
   // Region 1 (CCW)
   Polygon_2 r1_poly;
-  r1_poly.push_back(K::Point_2(-4.0, -4.0));
-  r1_poly.push_back(K::Point_2(0.0, 0.0));
+  r1_poly.push_back(K::Point_2(-1.0, 4.0));
   r1_poly.push_back(K::Point_2(-4.0, 4.0));
+  r1_poly.push_back(K::Point_2(-4.0, -4.0));
+  r1_poly.push_back(K::Point_2(-1.0, -4.0));
 
   Matrix2d r1_A;
-  r1_A << 1.0, 0.01,
-          -0.05, 0.99;
+  r1_A << 0.9, -0.1,
+          0.1, 1;
 
-  Vector2d r1_c = Vector2d::Zero();
+  Vector2d r1_c;
+  r1_c << 0.0,
+          -0.02;
 
   simple_pwa.push_back(std::make_pair(r1_poly, AutonomousLinearParams(r1_A, r1_c, 0)));
   
   // Region 2
   Polygon_2 r2_poly;
-  r2_poly.push_back(K::Point_2(-4.0, 4.0));
-  r2_poly.push_back(K::Point_2(0.0, 0.0));
-  r2_poly.push_back(K::Point_2(4.0, 4.0));
+  r2_poly.push_back(K::Point_2(1.0, 0.0));
+  r2_poly.push_back(K::Point_2(1.0, 4.0));
+  r2_poly.push_back(K::Point_2(-1.0, 4.0));
+  r2_poly.push_back(K::Point_2(-1.0, 0.0));
 
   Matrix2d r2_A;
-  r2_A << 1.0, 0.05,
-          -0.01, 0.99;
+  r2_A << 1.0, -0.02,
+          0.02, 0.9;
 
   Vector2d r2_c = Vector2d::Zero();
 
@@ -55,13 +59,14 @@ int main() {
   
   // Region 3
   Polygon_2 r3_poly;
-  r3_poly.push_back(K::Point_2(4.0, 4.0));
-  r3_poly.push_back(K::Point_2(0.0, 0.0));
-  r3_poly.push_back(K::Point_2(4.0, -4.0));
+  r3_poly.push_back(K::Point_2(1.0, 0.0));
+  r3_poly.push_back(K::Point_2(-1.0, 0.0));
+  r3_poly.push_back(K::Point_2(-1.0, -4.0));
+  r3_poly.push_back(K::Point_2(1.0, -4.0));
 
   Matrix2d r3_A;
-  r3_A << 1.0, 0.01,
-          -0.05, 0.99;
+  r3_A << 1.0, -0.02,
+          0.02, 0.9;
 
   Vector2d r3_c = Vector2d::Zero();
 
@@ -70,14 +75,17 @@ int main() {
   // Region 4
   Polygon_2 r4_poly;
   r4_poly.push_back(K::Point_2(4.0, -4.0));
-  r4_poly.push_back(K::Point_2(0.0, 0.0));
-  r4_poly.push_back(K::Point_2(-4.0, -4.0));
+  r4_poly.push_back(K::Point_2(4.0, 4.0));
+  r4_poly.push_back(K::Point_2(1.0, 4.0));
+  r4_poly.push_back(K::Point_2(1.0, -4.0));
 
   Matrix2d r4_A;
-  r4_A << 1.0, 0.05,
-          -0.01, 0.99;
+  r4_A << 0.9, -0.1,
+          0.1, 1;
 
-  Vector2d r4_c = Vector2d::Zero();
+  Vector2d r4_c;
+  r4_c << 0.0,
+          0.2;
 
   simple_pwa.push_back(std::make_pair(r4_poly, AutonomousLinearParams(r4_A, r4_c, 0)));
 

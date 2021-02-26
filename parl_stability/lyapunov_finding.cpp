@@ -221,44 +221,46 @@ std::tuple<PWAFunc, TransitionMap, OutMap>
 cannon::research::parl::refine_pwa(const PWAFunc& pwa, const TransitionMap&
     transition_map, const OutMap& out_map) {
 
-    PWAFunc new_pwa;
-    for (auto& pair : transition_map) {
-      unsigned int i = pair.first.first;  
+  std::multimap<unsigned int, unsigned int> new_polys;
 
-      for (auto& poly : pair.second) {
-        // X_{ij} experiences X_i dynamics
-        new_pwa.push_back(std::make_pair(poly, pwa[i].second));
-      }
+  PWAFunc new_pwa;
+  for (auto& pair : transition_map) {
+    unsigned int i = pair.first.first;  
+
+    for (auto& poly : pair.second) {
+      // The new PWA polygon will be at index new_pwa.size()
+      new_polys.insert(std::make_pair(i, new_pwa.size()));
+
+      // X_{ij} experiences X_i dynamics
+      new_pwa.push_back(std::make_pair(poly, pwa[i].second));
     }
+  }
 
-    // TODO I'm testing this; I think it should be alright to remove polygons
-    // that get mapped out of bounds from consideration, since they cannot be
-    // in the PI set by definition.
-    //
-    for (auto& pair : out_map) {
-      unsigned int i = pair.first;
+  for (auto& pair : out_map) {
+    unsigned int i = pair.first;
 
-      for (auto& poly : pair.second) {
-        // \Omega_{ip} experiences X_i dynamics
-        new_pwa.push_back(std::make_pair(poly, pwa[i].second));
-      }
+    for (auto& poly : pair.second) {
+      // The new PWA polygon will be at index new_pwa.size()
+      new_polys.insert(std::make_pair(i, new_pwa.size()));
+
+      // \Omega_{ip} experiences X_i dynamics
+      new_pwa.push_back(std::make_pair(poly, pwa[i].second));
     }
-    //
-    // TODO End testing
-    
+  }
+  
 
-    // Store refined PWA function
-    std::filesystem::create_directory("models");
-    save_pwa(new_pwa, std::string("models/pwa_") +
-        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())
-        + std::string(".h5"));
+  // Store refined PWA function
+  std::filesystem::create_directory("models");
+  save_pwa(new_pwa, std::string("models/pwa_") +
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())
+      + std::string(".h5"));
 
-    // TODO Make more efficient transition map computation that uses previous
-    // transition map information
-    auto new_transition_map_pair = compute_transition_map(new_pwa);
-    plot_transition_map(new_transition_map_pair, new_pwa);
+  // TODO Make more efficient transition map computation that uses previous
+  // transition map information
+  auto new_transition_map_pair = compute_transition_map(new_pwa, transition_map, new_polys);
+  //plot_transition_map(new_transition_map_pair, new_pwa);
 
-    return std::make_tuple(new_pwa, new_transition_map_pair.first, new_transition_map_pair.second);
+  return std::make_tuple(new_pwa, new_transition_map_pair.first, new_transition_map_pair.second);
 }
 
 double cannon::research::parl::evaluate_lyap(std::vector<LyapunovComponent> lyap,

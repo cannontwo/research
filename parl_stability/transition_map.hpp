@@ -49,6 +49,15 @@ namespace cannon {
           std::vector<std::pair<Polygon_2, AutonomousLinearParams>>& pwa_func);
 
       /*!
+       * Compute transition map of the input PWA system, using the transition
+       * information of an old PWA map and the correspondence induced by the
+       * input multimap.
+       */
+      std::pair<TransitionMap, OutMap> compute_transition_map(const PWAFunc&
+          pwa_func, const TransitionMap& old_transition_map, const
+          std::multimap<unsigned int, unsigned int>& correspondence);
+
+      /*!
        * Compute the effective PWA controlled system represented by a PARL
        * controller over estimated dynamics, taking into account controller
        * saturation.

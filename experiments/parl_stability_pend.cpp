@@ -93,60 +93,6 @@ int main() {
   std::tie(lyap, refined_pwa, theta) = find_lyapunov(parl_pwa_func, transition_map_pair.first,
       transition_map_pair.second, 10);
 
-  unsigned int num_lower_regions = 0;
-  Plotter p;
-  float hue1 = 0.0;
-  float hue2 = 90.0;
-  for (unsigned int i = 0; i < refined_pwa.size(); i++) {
-    bool all_lower = true;
-    auto poly = refined_pwa[i].first;
-
-    for (auto it = refined_pwa[i].first.vertices_begin(); it < refined_pwa[i].first.vertices_end(); it++) {
-      Vector2d query = Vector2d::Zero();
-      query[0] = CGAL::to_double(it->x());
-      query[1] = CGAL::to_double(it->y());
-
-      double lyap_val;
-      try {
-        lyap_val = evaluate_lyap(lyap, query);
-      } catch (...) {
-        log_info("Query point", query, "was not in lyapunov domain");
-        lyap_val = theta;
-      }
-      
-      if (lyap_val >= theta) {
-        all_lower = false;
-        break;
-      }
-    }
-
-    if (all_lower) {
-      log_info("Region", i, "included in Lyapunov PI set");
-
-      // TODO Can this be encapsulated in Plotter / color schemes?
-      for (auto it = refined_pwa[i].first.vertices_begin(); it <
-          refined_pwa[i].first.vertices_end(); it++) {
-        RowVector2f plot_point = RowVector2f::Zero();
-        plot_point[0] = CGAL::to_double(it->x());
-        plot_point[1] = CGAL::to_double(it->y());
-
-        double lyap_val = evaluate_lyap(lyap, query);
-        float t = lyap_val / theta;
-
-        float hue = (1.0 - t) * hue1 + t * hue2;
-        auto rgb = hsv_to_rgb(hue, 0.75, 0.25);
-        Vector4f point_value_color = Vector4f::Ones();
-        point_value_color.head(3) = rgb;
-        p.plot_points(plot_point, point_value_color);
-      }
-
-      num_lower_regions += 1;
-    }
-  }
-
-  log_info(num_lower_regions, "polygonal regions included in Lyapunov function PI set");
-  p.render();
-
   Vector2d zero = Vector2d::Zero();
   log_info("Value of Lyapunov function at 0 is", evaluate_lyap(lyap, zero));
 
@@ -156,6 +102,4 @@ int main() {
   Vector2d neg_ones = Vector2d::Ones();
   neg_ones[0] = -1;
   log_info("Value of Lyapunov function at (-1, 1) is", evaluate_lyap(lyap, neg_ones));
-
-  // Plot simple scatter plot of Lyapunov function
 }

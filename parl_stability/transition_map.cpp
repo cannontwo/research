@@ -80,6 +80,102 @@ std::pair<TransitionMap, OutMap> cannon::research::parl::compute_transition_map(
   return std::make_pair(transition_map, out_of_bounds_polys);
 }
 
+std::pair<TransitionMap, OutMap>
+cannon::research::parl::compute_transition_map(const PWAFunc& pwa_func, const
+    TransitionMap& old_transition_map, const std::multimap<unsigned int,
+    unsigned int>& correspondence) {
+
+  log_info("Computing transition map for PWA system with", pwa_func.size(), "regions");
+
+  TransitionMap transition_map;
+  OutMap out_of_bounds_polys;
+
+  std::vector<Polygon_set_2> premap_unions(pwa_func.size());
+
+  for (auto& idx_pair : old_transition_map) {
+    unsigned int i, j;
+    std::tie(i, j) = idx_pair.first;
+
+    auto i_newpoly_range = correspondence.equal_range(i);
+    auto j_newpoly_range = correspondence.equal_range(j);
+
+    for (auto new_idx = i_newpoly_range.first; new_idx !=
+        i_newpoly_range.second; new_idx++) {
+
+      // TODO
+      auto pair = pwa_func[new_idx->second];
+      if (pair.second.A_.determinant() == 0) 
+        continue;
+
+      for (auto new_target_idx = j_newpoly_range.first; new_target_idx !=
+          j_newpoly_range.second; new_target_idx++) {
+
+        auto pair2 = pwa_func[new_target_idx->second];
+
+        std::vector<Polygon_2> premap_set = compute_premap_set(pair.first, pair2.first,
+            pair.second);
+
+        std::vector<Polygon_2> poly_vec;
+
+        for (auto& poly : premap_set) {
+          if (poly.size() != 0) {
+            if (poly.orientation() != CGAL::COUNTERCLOCKWISE) {
+              poly.reverse_orientation();
+            }
+
+            poly_vec.push_back(poly);
+
+            if (premap_unions[new_idx->second].is_empty())
+              premap_unions[new_idx->second].insert(poly);
+            else {
+              premap_unions[new_idx->second].join(poly);
+            }
+          }
+        }
+
+        if (poly_vec.size() != 0) {
+          transition_map.insert(std::make_pair(std::make_pair(new_idx->second,
+                  new_target_idx->second), poly_vec));
+        }
+      }   
+    }
+  }
+
+  for (unsigned int i = 0; i < pwa_func.size(); i++) {
+    // Compute portion of this polygon mapped outside of state space (not in another polygon)
+    Polygon_set_2 diff_set;
+    diff_set.insert(pwa_func[i].first);
+    diff_set.difference(premap_unions[i]);
+
+    std::list<Polygon_with_holes_2> res;
+    std::list<Polygon_with_holes_2>::const_iterator it;
+    diff_set.polygons_with_holes (std::back_inserter (res));
+
+    // There may be multiple disconnected polygons mapped out of bounds, but we
+    // don't expect any of them to have holes.
+    std::vector<Polygon_2> diff_polys;
+    for (auto& poly_wh : res) {
+      assert(poly_wh.number_of_holes() == 0);
+      Polygon_2 diff_poly = poly_wh.outer_boundary();
+
+      if (diff_poly.size() != 0) {
+        if (diff_poly.orientation() != CGAL::COUNTERCLOCKWISE) {
+          diff_poly.reverse_orientation();
+        }
+
+        diff_polys.push_back(diff_poly);
+      }
+    }
+    if (diff_polys.size() != 0) {
+      out_of_bounds_polys.insert(std::make_pair(i, diff_polys));
+    }
+  }
+
+
+  return std::make_pair(transition_map, out_of_bounds_polys);
+
+}
+
 std::vector<std::pair<Polygon_2, AutonomousLinearParams>>
 cannon::research::parl::compute_parl_pwa_func(std::shared_ptr<Parl> parl, VD
     diagram) {
