@@ -67,6 +67,8 @@ namespace cannon {
        */
       std::pair<std::vector<LyapunovComponent>, double> load_lyap(const std::string& path);
 
+      // TODO Write function to test Lyapunov function for constraint satisfaction
+
     } // namespace parl
   } // namespace research
 } // namespace cannon

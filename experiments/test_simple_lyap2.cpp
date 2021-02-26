@@ -97,6 +97,8 @@ int main() {
   std::tie(lyap, refined_pwa, theta) = find_lyapunov(simple_pwa,
       transition_map_pair.first, transition_map_pair.second, 10);
 
+  // TODO Test that Lyapunov function satisfies constraints
+
   Vector2d zero = Vector2d::Zero();
   log_info("Value of Lyapunov function at 0 is", evaluate_lyap(lyap, zero));
 
