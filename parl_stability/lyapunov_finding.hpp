@@ -40,7 +40,7 @@ namespace cannon {
       };
 
       std::pair<std::vector<LyapunovComponent>, double> attempt_lp_solve(const PWAFunc& pwa, const
-          TransitionMap& transition_map, const OutMap& out_map, double M=100, double eps=1e-6);
+          TransitionMap& transition_map, const OutMap& out_map, double M=100, double eps=1e-4);
 
       std::tuple<std::vector<LyapunovComponent>, PWAFunc, double> find_lyapunov(const PWAFunc& pwa, const
           TransitionMap& initial_transition_map, const OutMap& initial_out_map,

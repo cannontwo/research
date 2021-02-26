@@ -84,6 +84,9 @@ int main() {
   //auto lyap = attempt_lp_solve(parl_pwa_func, transition_map_pair.first,
   //    transition_map_pair.second);
   
+  // TODO Think about making a smaller PWA to feed to find_lyapunov; i.e., only
+  // include regions close to 0.
+  
   std::vector<LyapunovComponent> lyap;
   PWAFunc refined_pwa;
   double theta;
@@ -103,7 +106,13 @@ int main() {
       query[0] = CGAL::to_double(it->x());
       query[1] = CGAL::to_double(it->y());
 
-      double lyap_val = evaluate_lyap(lyap, query);
+      double lyap_val;
+      try {
+        lyap_val = evaluate_lyap(lyap, query);
+      } catch (...) {
+        log_info("Query point", query, "was not in lyapunov domain");
+        lyap_val = theta;
+      }
       
       if (lyap_val >= theta) {
         all_lower = false;

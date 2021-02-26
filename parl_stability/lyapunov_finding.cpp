@@ -10,11 +10,12 @@ cannon::research::parl::attempt_lp_solve(const PWAFunc& pwa, const
   // var[3*i + 3] is F_i[0], var[3*i + 4] is F_i[1], var[3*i + 5] is g_i
   unsigned int num_vars = 3 * pwa.size() + 3; 
 
-  VectorXd lower = VectorXd::Ones(num_vars) * -1e6;
+  VectorXd lower = VectorXd::Ones(num_vars) * -1e3;
   lower[0] = eps; // \alpha_1 > 0
   lower[1] = eps; // \alpha_3 > 0
+  lower[2] = eps; // \theta > 0 is implied
 
-  VectorXd upper = VectorXd::Ones(num_vars) * 1e6;
+  VectorXd upper = VectorXd::Ones(num_vars) * 1e3;
 
   // Find polygon closures containing 0 and add upper and lower constraints = 0
   for (unsigned int i = 0; i < pwa.size(); i++) {
@@ -91,6 +92,17 @@ cannon::research::parl::attempt_lp_solve(const PWAFunc& pwa, const
         lhs_mat[3*j + 3] = interior[0];
         lhs_mat[3*j + 4] = interior[1];
 
+        // TODO This might be incorrect, but it also might be necessary to
+        // avoid numerical issues with the LP solving
+        if (std::fabs(lhs_mat[3*j + 3]) < 1e-6) {
+          log_info("Very small interior x constraint coeff, adding as zero");
+          lhs_mat[3*j + 3] = 0.0;
+        }
+        if (std::fabs(lhs_mat[3*j + 4]) < 1e-6) {
+          log_info("Very small interior y constraint coeff, adding as zero");
+          lhs_mat[3*j + 4] = 0.0;
+        }
+
         // g_j term
         lhs_mat[3*j + 5] = 1.0;
 
@@ -143,6 +155,9 @@ cannon::research::parl::attempt_lp_solve(const PWAFunc& pwa, const
   auto result = opt.optimize();
   log_info("Found solution to Lyapunov LP with objective", result.objective);
 
+  log_info("Retrieved alpha_1=", result.solution[0], ", alpha_3=",
+      result.solution[1], ", theta=", result.solution[2]);
+
   std::vector<LyapunovComponent> lyap;
   for (unsigned int i = 0; i < pwa.size(); i++) {
     RowVector2d F = RowVector2d::Zero();
@@ -192,6 +207,10 @@ cannon::research::parl::find_lyapunov(const PWAFunc& pwa, const TransitionMap&
 
     std::tie(current_pwa, current_transition_map, current_out_map) =
       refine_pwa(current_pwa, current_transition_map, current_out_map);
+
+    log_info("After refinement, transition map has",
+        current_transition_map.size(), "elements and out map has",
+        current_out_map.size(), "elements");
   }
 
   throw std::runtime_error("Could not solve Lyapunov LP within maximum iterations");
@@ -212,6 +231,10 @@ cannon::research::parl::refine_pwa(const PWAFunc& pwa, const TransitionMap&
       }
     }
 
+    // TODO I'm testing this; I think it should be alright to remove polygons
+    // that get mapped out of bounds from consideration, since they cannot be
+    // in the PI set by definition.
+    //
     for (auto& pair : out_map) {
       unsigned int i = pair.first;
 
@@ -220,6 +243,9 @@ cannon::research::parl::refine_pwa(const PWAFunc& pwa, const TransitionMap&
         new_pwa.push_back(std::make_pair(poly, pwa[i].second));
       }
     }
+    //
+    // TODO End testing
+    
 
     // Store refined PWA function
     std::filesystem::create_directory("models");
@@ -227,8 +253,10 @@ cannon::research::parl::refine_pwa(const PWAFunc& pwa, const TransitionMap&
         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())
         + std::string(".h5"));
 
+    // TODO Make more efficient transition map computation that uses previous
+    // transition map information
     auto new_transition_map_pair = compute_transition_map(new_pwa);
-    //plot_transition_map(new_transition_map_pair, new_pwa);
+    plot_transition_map(new_transition_map_pair, new_pwa);
 
     return std::make_tuple(new_pwa, new_transition_map_pair.first, new_transition_map_pair.second);
 }

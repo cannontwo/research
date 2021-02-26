@@ -57,7 +57,7 @@ std::pair<TransitionMap, OutMap> cannon::research::parl::compute_transition_map(
     std::list<Polygon_with_holes_2>::const_iterator it;
     diff_set.polygons_with_holes (std::back_inserter (res));
 
-    // There may be multiple disconnected polgyons mapped out of bounds, but we
+    // There may be multiple disconnected polygons mapped out of bounds, but we
     // don't expect any of them to have holes.
     std::vector<Polygon_2> diff_polys;
     for (auto& poly_wh : res) {
@@ -72,7 +72,9 @@ std::pair<TransitionMap, OutMap> cannon::research::parl::compute_transition_map(
         diff_polys.push_back(diff_poly);
       }
     }
-    out_of_bounds_polys.insert(std::make_pair(i, diff_polys));
+    if (diff_polys.size() != 0) {
+      out_of_bounds_polys.insert(std::make_pair(i, diff_polys));
+    }
   }
 
   return std::make_pair(transition_map, out_of_bounds_polys);
