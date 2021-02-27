@@ -202,7 +202,7 @@ cannon::research::parl::compute_parl_pwa_func(std::shared_ptr<Parl> parl, VD
   auto dynamics = parl->get_controlled_system();
   auto min_sat_dynamics = parl->get_min_sat_controlled_system();
   auto max_sat_dynamics = parl->get_max_sat_controlled_system();
- 
+
   for (auto const& pair : sat_voronoi_polygons) {
     unsigned int i = pair.first;
 
@@ -222,6 +222,13 @@ cannon::research::parl::compute_parl_pwa_func(std::shared_ptr<Parl> parl, VD
     }
   }
 
+  // TODO This is a hack 
+  // Correct dynamics in regions containing zero to avoid numerical errors
+  for (auto& pair : pwa_func) {
+    if (is_inside(Vector2d::Zero(), pair.first)) {
+      pair.second.c_ = Vector2d::Zero();
+    }
+  }
 
   return pwa_func;
 }
@@ -628,3 +635,28 @@ PWAFunc cannon::research::parl::load_pwa(const std::string& path) {
 
   return ret_pwa;
 }
+
+PWAFunc cannon::research::parl::restrict_pwa(const PWAFunc& pwa, double radius) {
+  PWAFunc ret_pwa;
+
+  for (auto& pair : pwa) {
+    bool all_in = true;
+    for (auto it = pair.first.vertices_begin(); it < pair.first.vertices_end(); it++) {
+      Vector2d vert_vec;
+      vert_vec << CGAL::to_double(it->x()),
+                  CGAL::to_double(it->y());
+
+      if (vert_vec.norm() > radius) {
+        all_in = false;
+        break;
+      }
+    }
+
+    if (all_in) {
+      ret_pwa.push_back(pair);
+    }
+  }
+
+  return ret_pwa;
+}
+

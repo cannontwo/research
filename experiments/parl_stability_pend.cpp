@@ -49,6 +49,9 @@ int main() {
   // Create transition map using CGAL polygon affine mapping
   auto parl_pwa_func = compute_parl_pwa_func(r.get_agent(), diagram);
 
+  // TODO Testing
+  parl_pwa_func = restrict_pwa(parl_pwa_func, 2.0);
+
   auto transition_map_pair = compute_transition_map(parl_pwa_func);
 
   log_info("Computed transition map with", transition_map_pair.first.size(), "elements");
@@ -89,9 +92,12 @@ int main() {
   
   std::vector<LyapunovComponent> lyap;
   PWAFunc refined_pwa;
-  double theta;
-  std::tie(lyap, refined_pwa, theta) = find_lyapunov(parl_pwa_func, transition_map_pair.first,
-      transition_map_pair.second, 10);
+  double alpha_1, alpha_3, theta;
+  std::tie(lyap, refined_pwa, alpha_1, alpha_3, theta) =
+    find_lyapunov(parl_pwa_func, transition_map_pair.first,
+        transition_map_pair.second, 50);
+
+  check_lyap(lyap, refined_pwa, alpha_1, alpha_3, theta);
 
   Vector2d zero = Vector2d::Zero();
   log_info("Value of Lyapunov function at 0 is", evaluate_lyap(lyap, zero));

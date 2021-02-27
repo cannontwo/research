@@ -39,12 +39,15 @@ namespace cannon {
         double affine_part_;
       };
 
-      std::pair<std::vector<LyapunovComponent>, double> attempt_lp_solve(const PWAFunc& pwa, const
-          TransitionMap& transition_map, const OutMap& out_map, double M=100, double eps=1e-4);
+      std::tuple<std::vector<LyapunovComponent>, double, double, double>
+        attempt_lp_solve(const PWAFunc& pwa, const TransitionMap&
+            transition_map, const OutMap& out_map, double M=100, double
+            eps=1e-3);
 
-      std::tuple<std::vector<LyapunovComponent>, PWAFunc, double> find_lyapunov(const PWAFunc& pwa, const
-          TransitionMap& initial_transition_map, const OutMap& initial_out_map,
-          unsigned int max_iters=10);
+      std::tuple<std::vector<LyapunovComponent>, PWAFunc, double, double,
+        double> find_lyapunov(const PWAFunc& pwa, const TransitionMap&
+            initial_transition_map, const OutMap& initial_out_map, unsigned int
+            max_iters=10);
 
       std::tuple<PWAFunc, TransitionMap, OutMap> refine_pwa(const PWAFunc& pwa,
           const TransitionMap& transition_map, const OutMap& out_map);
@@ -68,6 +71,11 @@ namespace cannon {
       std::pair<std::vector<LyapunovComponent>, double> load_lyap(const std::string& path);
 
       // TODO Write function to test Lyapunov function for constraint satisfaction
+      void check_lyap(const std::vector<LyapunovComponent>& lyap, const
+          PWAFunc& pwa, double alpha_1, double alpha_3, double theta);
+
+      bool check_lyap_for_state(const std::vector<LyapunovComponent>& lyap, const
+          PWAFunc& pwa, double alpha_1, double alpha_3, double theta, const Vector2d& query);
 
     } // namespace parl
   } // namespace research

@@ -85,9 +85,11 @@ int main() {
   
   std::vector<LyapunovComponent> lyap;
   PWAFunc refined_pwa;
-  double theta;
-  std::tie(lyap, refined_pwa, theta) = find_lyapunov(simple_pwa,
-      transition_map_pair.first, transition_map_pair.second, 10);
+  double alpha_1, alpha_3, theta;
+  std::tie(lyap, refined_pwa, alpha_1, alpha_3, theta) = find_lyapunov(simple_pwa,
+      transition_map_pair.first, transition_map_pair.second, 100);
+
+  check_lyap(lyap, refined_pwa, alpha_1, alpha_3, theta);
 
   // TODO Test that Lyapunov function satisfies constraints
 

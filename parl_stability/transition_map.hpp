@@ -51,7 +51,8 @@ namespace cannon {
       /*!
        * Compute transition map of the input PWA system, using the transition
        * information of an old PWA map and the correspondence induced by the
-       * input multimap.
+       * input multimap. This is more efficient than the version that can't use
+       * the previous transition map.
        */
       std::pair<TransitionMap, OutMap> compute_transition_map(const PWAFunc&
           pwa_func, const TransitionMap& old_transition_map, const
@@ -189,6 +190,16 @@ namespace cannon {
        * \return The loaded PWA function.
        */
       PWAFunc load_pwa(const std::string& path);
+
+      /*!
+       * Restrict input PWA by only including regions entirely within the input radius.
+       *
+       * \param pwa The PWA to restrict.
+       * \param radius The around 0 to restrict the PWA to.
+       *
+       * \returns The restricted PWA.
+       */
+      PWAFunc restrict_pwa(const PWAFunc& pwa, double radius);
 
     } // namespace parl
   } // namespace research
