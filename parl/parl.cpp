@@ -46,7 +46,8 @@ void Parl::value_grad_update_controller(const VectorXd& state, bool stability) {
     controllers_[idx].apply_gradient(k_grad, K_grad);
   }
 
-  if (stability && (idx == zero_ref_idx_)) {
+  if (stability && 
+      (std::find(zero_ref_idxs_.begin(), zero_ref_idxs_.end(), idx) != zero_ref_idxs_.end())) {
     // Set controllers_[idx].k_ to be analytic so that stability is enforced around zero
     auto zero_B = get_B_matrix_idx_(idx);
     auto zero_c = dynamics_models_[idx].get_identified_mats().second;

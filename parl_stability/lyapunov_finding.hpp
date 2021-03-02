@@ -52,6 +52,9 @@ namespace cannon {
       std::tuple<PWAFunc, TransitionMap, OutMap> refine_pwa(const PWAFunc& pwa,
           const TransitionMap& transition_map, const OutMap& out_map);
 
+      std::tuple<PWAFunc, TransitionMap, OutMap> refine_pwa_out_only(const PWAFunc& pwa,
+          const TransitionMap& transition_map, const OutMap& out_map);
+
       double evaluate_lyap(std::vector<LyapunovComponent> lyap, const Vector2d& query);
 
       /*!

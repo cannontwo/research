@@ -18,6 +18,7 @@
 #include <cannon/ml/rls.hpp>
 #include <cannon/research/parl/hyperparams.hpp>
 #include <cannon/research/parl/linear_params.hpp>
+#include <cannon/research/parl_stability/voronoi.hpp>
 #include <cannon/math/multivariate_normal.hpp>
 
 
@@ -77,7 +78,21 @@ namespace cannon {
             }
 
             VectorXd zero_vec = VectorXd::Zero(state_dim_);
-            zero_ref_idx_ = ref_tree_.get_nearest_idx(zero_vec);
+
+            // Find indices of regions containing zero
+            auto diagram = compute_voronoi_diagram(refs_);
+            auto polys = create_bounded_voronoi_polygons(refs_, diagram);
+
+            for (unsigned int i = 0; i < refs.size(); i++) {
+              if (is_inside(Vector2d::Zero(), polys[i])) {
+                zero_ref_idxs_.push_back(i);
+              }
+            }
+
+            log_info("References whose Voronoi regions cover (0, 0):");
+            for (auto idx : zero_ref_idxs_) {
+              log_info("\t (", idx, "):", refs.col(idx));
+            }
           }
 
           void process_datum(const VectorXd& state, const VectorXd& action,
@@ -142,9 +157,8 @@ namespace cannon {
           MatrixXd refs_;
           Hyperparams params_;
 
-          // Ref whose Voronoi region contains zero. Assuming that only one
-          // contains zero for now
-          unsigned int zero_ref_idx_;
+          // Refs whose Voronoi regions contain zero
+          std::vector<unsigned int> zero_ref_idxs_;
 
           std::vector<RLSFilter> dynamics_models_;
           std::vector<AffineController> controllers_;

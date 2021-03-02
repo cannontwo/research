@@ -44,13 +44,13 @@ int main() {
   log_info("Analytic controlled system has affine term", zero_B * analytic_k + zero_c, "\n");
 
   // Compute polytopal representation of Voronoi diagram of PARL refs
-  auto diagram = compute_voronoi_diagram(r.get_agent());
+  auto diagram = compute_voronoi_diagram(r.get_agent()->get_refs());
 
   // Create transition map using CGAL polygon affine mapping
   auto parl_pwa_func = compute_parl_pwa_func(r.get_agent(), diagram);
 
   // TODO Testing
-  parl_pwa_func = restrict_pwa(parl_pwa_func, 2.0);
+  //parl_pwa_func = restrict_pwa(parl_pwa_func, 3.0);
 
   auto transition_map_pair = compute_transition_map(parl_pwa_func);
 
@@ -95,7 +95,7 @@ int main() {
   double alpha_1, alpha_3, theta;
   std::tie(lyap, refined_pwa, alpha_1, alpha_3, theta) =
     find_lyapunov(parl_pwa_func, transition_map_pair.first,
-        transition_map_pair.second, 50);
+        transition_map_pair.second, 500);
 
   check_lyap(lyap, refined_pwa, alpha_1, alpha_3, theta);
 

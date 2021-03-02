@@ -208,6 +208,23 @@ cannon::research::parl::find_lyapunov(const PWAFunc& pwa, const TransitionMap&
       log_info("LP infeasible, refining polygon map");
     }
 
+    // TODO Idea for an alternative iterative refinement scheme: While the out
+    // map is nonzero, only refine regions with polygons that get mapped out,
+    // in order to refine the boundary quickly. This avoids the explosion of
+    // transition map size internal to the possible PI set, which may be
+    // entirely unnecessary and just slowing down LP solving.
+
+    // Original
+    //std::tie(current_pwa, current_transition_map, current_out_map) =
+    //  refine_pwa(current_pwa, current_transition_map, current_out_map);
+    
+    int iters = 0;
+    while (current_out_map.size() != 0 && iters < 10) {
+      iters++;
+      std::tie(current_pwa, current_transition_map, current_out_map) =
+        refine_pwa_out_only(current_pwa, current_transition_map, current_out_map);
+    }
+
     std::tie(current_pwa, current_transition_map, current_out_map) =
       refine_pwa(current_pwa, current_transition_map, current_out_map);
 
@@ -239,18 +256,65 @@ cannon::research::parl::refine_pwa(const PWAFunc& pwa, const TransitionMap&
     }
   }
 
-  for (auto& pair : out_map) {
-    unsigned int i = pair.first;
+  // TODO Testing
+  //for (auto& pair : out_map) {
+  //  unsigned int i = pair.first;
 
-    for (auto& poly : pair.second) {
-      // The new PWA polygon will be at index new_pwa.size()
-      new_polys.insert(std::make_pair(i, new_pwa.size()));
+  //  for (auto& poly : pair.second) {
+  //    // The new PWA polygon will be at index new_pwa.size()
+  //    new_polys.insert(std::make_pair(i, new_pwa.size()));
 
-      // \Omega_{ip} experiences X_i dynamics
-      new_pwa.push_back(std::make_pair(poly, pwa[i].second));
+  //    // \Omega_{ip} experiences X_i dynamics
+  //    new_pwa.push_back(std::make_pair(poly, pwa[i].second));
+  //  }
+  //}
+  // TODO End testing
+  
+
+  // Store refined PWA function
+  std::filesystem::create_directory("models");
+  save_pwa(new_pwa, std::string("models/pwa_") +
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())
+      + std::string(".h5"));
+
+  auto new_transition_map_pair = compute_transition_map(new_pwa, transition_map, new_polys);
+  plot_transition_map(new_transition_map_pair, new_pwa);
+
+  return std::make_tuple(new_pwa, new_transition_map_pair.first, new_transition_map_pair.second);
+}
+
+std::tuple<PWAFunc, TransitionMap, OutMap> cannon::research::parl::refine_pwa_out_only(const PWAFunc&
+    pwa, const TransitionMap& transition_map, const OutMap& out_map) {
+  std::multimap<unsigned int, unsigned int> new_polys;
+
+  log_info("Refining only out map polygons");
+
+  PWAFunc new_pwa;
+  for (auto& pair : transition_map) {
+    unsigned int i = pair.first.first;  
+
+    if (out_map.find(i) != out_map.end() && out_map.at(i).size() != 0) {
+      //log_info("Adding transition map polys for region", i);
+      for (auto& poly : pair.second) {
+        // The new PWA polygon will be at index new_pwa.size()
+        
+        // Removing small polygons might help numerical issues
+        new_polys.insert(std::make_pair(i, new_pwa.size()));
+
+        // X_{ij} experiences X_i dynamics
+        new_pwa.push_back(std::make_pair(poly, pwa[i].second));
+      }
     }
   }
-  
+
+  for (unsigned int i = 0; i < pwa.size(); i++) {
+    // If no part of this polygon is mapped out of bounds, we leave it alone
+    if (out_map.find(i) == out_map.end() || out_map.at(i).size() == 0) {
+      // The new PWA polygon will be at index new_pwa.size()
+      new_polys.insert(std::make_pair(i, new_pwa.size()));
+      new_pwa.push_back(pwa[i]);
+    }
+  }
 
   // Store refined PWA function
   std::filesystem::create_directory("models");

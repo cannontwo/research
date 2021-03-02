@@ -17,8 +17,16 @@
 #include <thirdparty/HighFive/include/highfive/H5Easy.hpp>
 
 #include <cannon/research/parl_stability/voronoi.hpp>
+#include <cannon/research/parl/linear_params.hpp>
+#include <cannon/research/parl/parl.hpp>
 #include <cannon/plot/plotter.hpp>
 #include <cannon/graphics/random_color.hpp>
+
+using K = CGAL::Exact_predicates_exact_constructions_kernel;
+using DT = CGAL::Delaunay_triangulation_2<K>;
+using AT = CGAL::Delaunay_triangulation_adaptation_traits_2<DT>;
+using AP = CGAL::Delaunay_triangulation_caching_degeneracy_removal_policy_2<DT>;
+using VD = CGAL::Voronoi_diagram_2<DT, AT, AP>;
 
 using Polygon_2 = CGAL::Polygon_2<K>;
 using Polygon_with_holes_2 = CGAL::Polygon_with_holes_2<K>;
@@ -73,21 +81,6 @@ namespace cannon {
         compute_parl_pwa_func(std::shared_ptr<Parl> parl, VD diagram);
 
       /*!
-       * Create bounded polygons from the input voronoi diagram corresponding
-       * to the references for the input PARL agent.
-       *
-       * \param parl The PARL agent whose reference points generated the input
-       * Voronoi diagram.
-       * \param diagram The Voronoi diagram.
-       *
-       * \returns A map from reference index to Voronoi polygon, for only the
-       * bounded polygons in the Voronoi diagram.
-       */
-      std::map<unsigned int, Polygon_2>
-        create_bounded_voronoi_polygons(std::shared_ptr<Parl> parl, VD
-            diagram);
-
-      /*!
        * Map the input polygon using the input affine map, and return the
        * mapped polygon and inverse affine transformation.
        *
@@ -128,28 +121,6 @@ namespace cannon {
       std::tuple<Polygon_2, Polygon_2, Polygon_2> get_saturated_polygons(const
           Polygon_2& voronoi_polygon, const RowVector2d& K, double k, double
           lower=-2.0, double upper=2.0);
-
-      /*!
-       * Extracts a polygon from a Nef_polyhedron explorer which is assumed to
-       * contain a single finite face. This is specifically used for extracting
-       * controller saturation regions on top of the Parl Voronoi diagram, so
-       * its usage in other scenarios is probably sketchy.
-       *
-       * \param e Explorer corresponding to a planar Nef_polyhedron map.
-       *
-       * \returns A polygon representing the single finite face.
-       */
-      Polygon_2 extract_finite_face_polygon(const Nef_polyhedron::Explorer& e);
-
-      /*!
-       * Check whether input state is in input polygon.
-       * 
-       * \param state The state the check
-       * \param poly The polygon to check for containment
-       *
-       * \return Whether the polygon contains the input state.
-       */
-      bool is_inside(const Vector2d& state, const Polygon_2& poly);
 
       /*!
        * Plot transition map and display plot.
@@ -200,6 +171,8 @@ namespace cannon {
        * \returns The restricted PWA.
        */
       PWAFunc restrict_pwa(const PWAFunc& pwa, double radius);
+
+      Vector2d evaluate_pwa(const PWAFunc& pwa, const Vector2d& query);
 
     } // namespace parl
   } // namespace research
