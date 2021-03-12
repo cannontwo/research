@@ -12,8 +12,8 @@ cannon::research::parl::attempt_lp_solve(const PWAFunc& pwa, const
   unsigned int num_vars = 3 * pwa.size() + 3; 
 
   VectorXd lower = VectorXd::Ones(num_vars) * -1e30;
-  lower[0] = eps; // \alpha_1 > 0
-  lower[1] = eps; // \alpha_3 > 0
+  lower[0] = 0.0; // \alpha_1 >= 0
+  lower[1] = 0.0; // \alpha_3 >= 0
   lower[2] = eps; // \theta > 0 is implied
 
   VectorXd upper = VectorXd::Ones(num_vars) * 1e30;
@@ -215,15 +215,15 @@ cannon::research::parl::find_lyapunov(const PWAFunc& pwa, const TransitionMap&
     // entirely unnecessary and just slowing down LP solving.
 
     // Original
-    //std::tie(current_pwa, current_transition_map, current_out_map) =
-    //  refine_pwa(current_pwa, current_transition_map, current_out_map);
+    std::tie(current_pwa, current_transition_map, current_out_map) =
+      refine_pwa(current_pwa, current_transition_map, current_out_map);
     
-    int iters = 0;
-    while (current_out_map.size() != 0 && iters < 10) {
-      iters++;
-      std::tie(current_pwa, current_transition_map, current_out_map) =
-        refine_pwa_out_only(current_pwa, current_transition_map, current_out_map);
-    }
+    //int iters = 0;
+    //while (current_out_map.size() != 0 && iters < 10) {
+    //  iters++;
+    //  std::tie(current_pwa, current_transition_map, current_out_map) =
+    //    refine_pwa_out_only(current_pwa, current_transition_map, current_out_map);
+    //}
 
     std::tie(current_pwa, current_transition_map, current_out_map) =
       refine_pwa(current_pwa, current_transition_map, current_out_map);
@@ -278,7 +278,7 @@ cannon::research::parl::refine_pwa(const PWAFunc& pwa, const TransitionMap&
       + std::string(".h5"));
 
   auto new_transition_map_pair = compute_transition_map(new_pwa, transition_map, new_polys);
-  plot_transition_map(new_transition_map_pair, new_pwa);
+  //plot_transition_map(new_transition_map_pair, new_pwa);
 
   return std::make_tuple(new_pwa, new_transition_map_pair.first, new_transition_map_pair.second);
 }
