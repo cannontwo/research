@@ -20,36 +20,65 @@ int main(int argc, char** argv) {
   Plotter p;
   double eps = 1e-6;
 
-  const unsigned int GRID_SIZE = 200;
-  for (unsigned int i = 0; i < GRID_SIZE; i++) {
-    for (unsigned int j = 0; j < GRID_SIZE; j++) {
+  unsigned int processed = 0;
+  for (auto& component : lyap) {
+    MatrixX4f colors = MatrixX4f::Zero(component.poly_.size(), 4);
+
+    unsigned int i = 0;
+    for (auto it = component.poly_.vertices_begin(); it < component.poly_.vertices_end(); it++) {
       Vector2d test_state = Vector2d::Zero();
+      test_state[0] = CGAL::to_double(it->x());
+      test_state[1] = CGAL::to_double(it->y());
 
-      // TODO Automatically derive bounds
-      test_state[0] = -4.0 + (8.0 / GRID_SIZE) * i;
-      test_state[1] = -4.0 + (8.0 / GRID_SIZE) * j;
+      double lyap_val = evaluate_lyap(lyap, test_state);
+      float t = lyap_val / theta;
+      Vector3d rgb = tinycolormap::GetColor(t, tinycolormap::ColormapType::Viridis).ConvertToEigen();
+      Vector4f point_value_color = Vector4f::Ones();
+      point_value_color[0] = rgb[0];
+      point_value_color[1] = rgb[1];
+      point_value_color[2] = rgb[2];
 
-      for (unsigned int k = 0; k < lyap.size(); k++) {
-        if (is_inside(test_state, lyap[k].poly_)) {
-          double lyap_val = evaluate_lyap(lyap, test_state);
-          if (lyap_val < theta - eps) {
-            float t = lyap_val / theta;
+      colors.row(i) = point_value_color.transpose();
 
-            Vector3d rgb = tinycolormap::GetColor(t, tinycolormap::ColormapType::Viridis).ConvertToEigen();
-            Vector4f point_value_color = Vector4f::Ones();
-            point_value_color[0] = rgb[0];
-            point_value_color[1] = rgb[1];
-            point_value_color[2] = rgb[2];
-
-            RowVector2f plot_point;
-            plot_point[0] = test_state[0];
-            plot_point[1] = test_state[1];
-            p.plot_points(plot_point, point_value_color);
-          }
-        }
-      }
+      i++;
     }
+
+    p.plot_polygon(component.poly_, colors);
+    processed++;
+
+    log_info("Processed", processed, "/", lyap.size(), "Lyapunov components");
   }
+
+  //const unsigned int GRID_SIZE = 200;
+  //for (unsigned int i = 0; i < GRID_SIZE; i++) {
+  //  for (unsigned int j = 0; j < GRID_SIZE; j++) {
+  //    Vector2d test_state = Vector2d::Zero();
+
+  //    // TODO Automatically derive bounds
+  //    test_state[0] = -4.0 + (8.0 / GRID_SIZE) * i;
+  //    test_state[1] = -4.0 + (8.0 / GRID_SIZE) * j;
+
+  //    for (unsigned int k = 0; k < lyap.size(); k++) {
+  //      if (is_inside(test_state, lyap[k].poly_)) {
+  //        double lyap_val = evaluate_lyap(lyap, test_state);
+  //        if (lyap_val < theta - eps) {
+  //          float t = lyap_val / theta;
+
+  //          Vector3d rgb = tinycolormap::GetColor(t, tinycolormap::ColormapType::Viridis).ConvertToEigen();
+  //          Vector4f point_value_color = Vector4f::Ones();
+  //          point_value_color[0] = rgb[0];
+  //          point_value_color[1] = rgb[1];
+  //          point_value_color[2] = rgb[2];
+
+  //          RowVector2f plot_point;
+  //          plot_point[0] = test_state[0];
+  //          plot_point[1] = test_state[1];
+  //          p.plot_points(plot_point, point_value_color);
+  //        }
+  //      }
+  //    }
+  //  }
+  //}
 
   p.render();
 }

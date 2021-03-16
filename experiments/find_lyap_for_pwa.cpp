@@ -8,15 +8,16 @@
 using namespace cannon::research::parl;
 
 int main(int argc, char** argv) {
-  if (argc != 2) {
-    log_info("Pass a PWA HDF5 file to load");
+  if (argc != 3) {
+    log_info("Pass a PWA HDF5 file to load and a radius to contrict it to");
   }
    
   PWAFunc pwa = load_pwa(std::string(argv[1]));
+  double radius = std::stod(argv[2]);
 
   // This can be adjusted to get a fuller picture at the expense of more
   // computation time.
-  pwa = restrict_pwa(pwa, 3.0);
+  pwa = restrict_pwa(pwa, radius);
 
   auto transition_map_pair = compute_transition_map(pwa);
   

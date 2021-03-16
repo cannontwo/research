@@ -445,7 +445,8 @@ PWAFunc cannon::research::parl::restrict_pwa(const PWAFunc& pwa, double radius) 
       vert_vec << CGAL::to_double(it->x()),
                   CGAL::to_double(it->y());
 
-      if (vert_vec.norm() > radius) {
+      //if (vert_vec.norm() > radius) {
+      if (std::fabs(vert_vec[0]) > radius) {
         all_in = false;
         break;
       }
