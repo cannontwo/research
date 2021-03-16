@@ -12,8 +12,13 @@ cannon::research::parl::attempt_lp_solve(const PWAFunc& pwa, const
   unsigned int num_vars = 3 * pwa.size() + 3; 
 
   VectorXd lower = VectorXd::Ones(num_vars) * -1e30;
+
+  // Note that setting the lower bound on alpha_1, alpha_3 to 0.0 means that
+  // found Lyapunov functions are not certificates of exponential stability,
+  // but rather certificates of positive invariance.
   lower[0] = 0.0; // \alpha_1 >= 0
   lower[1] = 0.0; // \alpha_3 >= 0
+
   lower[2] = eps; // \theta > 0 is implied
 
   VectorXd upper = VectorXd::Ones(num_vars) * 1e30;

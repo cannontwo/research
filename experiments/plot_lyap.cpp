@@ -18,6 +18,7 @@ int main(int argc, char** argv) {
   std::tie(lyap, theta) = load_lyap(std::string(argv[1]));
 
   Plotter p;
+  double eps = 1e-6;
 
   const unsigned int GRID_SIZE = 200;
   for (unsigned int i = 0; i < GRID_SIZE; i++) {
@@ -31,7 +32,7 @@ int main(int argc, char** argv) {
       for (unsigned int k = 0; k < lyap.size(); k++) {
         if (is_inside(test_state, lyap[k].poly_)) {
           double lyap_val = evaluate_lyap(lyap, test_state);
-          if (lyap_val < theta) {
+          if (lyap_val < theta - eps) {
             float t = lyap_val / theta;
 
             Vector3d rgb = tinycolormap::GetColor(t, tinycolormap::ColormapType::Viridis).ConvertToEigen();
