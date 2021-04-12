@@ -47,7 +47,8 @@ namespace cannon {
           }
 
           Runner(std::shared_ptr<Environment> env, const std::string&
-              config_filename, bool render = false) : env_(env), render_(render) {
+              config_filename, bool render = false, bool stability = false) :
+            env_(env), render_(render) {
 
             load_config(config_filename);
             MatrixXd refs = sample_refs_();
@@ -66,7 +67,7 @@ namespace cannon {
             Hyperparams params;
             params.load_config(config_filename);
             parl_ = std::make_shared<Parl>(env_->get_state_space(),
-                env->get_action_space(), refs, params);
+                env->get_action_space(), refs, params, 0, stability);
 
             env_->reset();
 

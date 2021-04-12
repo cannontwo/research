@@ -42,13 +42,13 @@ namespace cannon {
           
           Parl(const std::shared_ptr<ob::StateSpace> state_space, const
               std::shared_ptr<oc::RealVectorControlSpace> action_space, const MatrixXd&
-              refs, Hyperparams params, int seed = 0) :
+              refs, Hyperparams params, int seed = 0, bool stability = false) :
             state_dim_(state_space->getDimension()),
             action_dim_(action_space->getDimension()),
             state_space_(state_space), action_space_(action_space),
             seed_(seed), refs_(refs), params_(params),
           value_model_(state_dim_, refs.cols(), params.discount_factor),
-          ref_tree_(state_dim_) {
+          ref_tree_(state_dim_), stability_(stability) {
 
             if (refs_.rows() != state_dim_)
               throw std::runtime_error("PARL reference points have the wrong dimension");
@@ -80,18 +80,20 @@ namespace cannon {
             VectorXd zero_vec = VectorXd::Zero(state_dim_);
 
             // Find indices of regions containing zero
-            auto diagram = compute_voronoi_diagram(refs_);
-            auto polys = create_bounded_voronoi_polygons(refs_, diagram);
+            if (stability_) {
+              auto diagram = compute_voronoi_diagram(refs_);
+              auto polys = create_bounded_voronoi_polygons(refs_, diagram);
 
-            for (unsigned int i = 0; i < refs.size(); i++) {
-              if (is_inside(Vector2d::Zero(), polys[i])) {
-                zero_ref_idxs_.push_back(i);
+              for (unsigned int i = 0; i < refs.size(); i++) {
+                if (is_inside(Vector2d::Zero(), polys[i])) {
+                  zero_ref_idxs_.push_back(i);
+                }
               }
-            }
 
-            log_info("References whose Voronoi regions cover (0, 0):");
-            for (auto idx : zero_ref_idxs_) {
-              log_info("\t (", idx, "):", refs.col(idx));
+              log_info("References whose Voronoi regions cover (0, 0):");
+              for (auto idx : zero_ref_idxs_) {
+                log_info("\t (", idx, "):", refs.col(idx));
+              }
             }
           }
 
@@ -99,8 +101,7 @@ namespace cannon {
               double reward, const VectorXd& next_state, bool done = false,
               bool use_local = false);
 
-          // TODO May want to make stability setting a hyperparameter
-          void value_grad_update_controller(const VectorXd& state, bool stability=true);
+          void value_grad_update_controller(const VectorXd& state);
 
           VectorXd predict_next_state(const VectorXd& state, const VectorXd& action, 
               bool use_local = false);
@@ -165,6 +166,8 @@ namespace cannon {
           PiecewiseLSTDFilter value_model_;
 
           KDTreeIndexed ref_tree_;
+
+          bool stability_;
       };
 
     } // namespace parl

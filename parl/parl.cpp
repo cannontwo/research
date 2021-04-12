@@ -24,7 +24,7 @@ void Parl::process_datum(const VectorXd& state, const VectorXd& action,
   }
 }
 
-void Parl::value_grad_update_controller(const VectorXd& state, bool stability) {
+void Parl::value_grad_update_controller(const VectorXd& state) {
   check_state_dim_(state);
 
   int idx = ref_tree_.get_nearest_idx(state);
@@ -46,7 +46,7 @@ void Parl::value_grad_update_controller(const VectorXd& state, bool stability) {
     controllers_[idx].apply_gradient(k_grad, K_grad);
   }
 
-  if (stability && 
+  if (stability_ && 
       (std::find(zero_ref_idxs_.begin(), zero_ref_idxs_.end(), idx) != zero_ref_idxs_.end())) {
     // Set controllers_[idx].k_ to be analytic so that stability is enforced around zero
     auto zero_B = get_B_matrix_idx_(idx);

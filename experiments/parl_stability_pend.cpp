@@ -23,7 +23,7 @@ int main() {
 
   Runner r(env,
       "/home/cannon/Documents/cannon/cannon/research/experiments/parl_configs/r10c10_short.yaml",
-      false);
+      false, true);
   r.run();
 
   auto controlled_system = r.get_agent()->get_controlled_system();

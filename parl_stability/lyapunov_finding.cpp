@@ -230,8 +230,8 @@ cannon::research::parl::find_lyapunov(const PWAFunc& pwa, const TransitionMap&
     //    refine_pwa_out_only(current_pwa, current_transition_map, current_out_map);
     //}
 
-    std::tie(current_pwa, current_transition_map, current_out_map) =
-      refine_pwa(current_pwa, current_transition_map, current_out_map);
+    //std::tie(current_pwa, current_transition_map, current_out_map) =
+    //  refine_pwa(current_pwa, current_transition_map, current_out_map);
 
     log_info("After refinement, transition map has",
         current_transition_map.size(), "elements and out map has",

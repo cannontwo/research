@@ -29,6 +29,7 @@ std::vector<double> get_ref_point_times(oc::PathControl& path) {
   
   double accumulated_dur = 0.0;
   for (unsigned int i = 0; i < durations.size(); i++) {
+    log_info("Found planned duration", durations[i]);
     points.push_back(accumulated_dur + (0.5 * durations[i])); 
     accumulated_dur += durations[i];
   }
@@ -66,7 +67,7 @@ void execute_control_for_duration(KinematicCarEnvironment& env, Parl& parl, cons
       parl_c = parl.get_action(error_state);
     } 
 
-    log_info("PARL action is", parl_c);
+    //log_info("PARL action is", parl_c);
 
     std::tie(new_state, reward, done) = env.step(c + parl_c);
     env.render();
@@ -172,8 +173,13 @@ oc::PathControl plan_to_goal(KinCarSystem& sys, KinematicCarEnvironment& env,
 
   ss.setStartAndGoalStates(start, goal, 0.05);
 
+  log_info("Propagation step size is", ss.getSpaceInformation()->getPropagationStepSize());
+  ss.getSpaceInformation()->setPropagationStepSize(0.01);
+  log_info("Propagation step size is now", ss.getSpaceInformation()->getPropagationStepSize());
+
   auto planner = std::make_shared<oc::SST>(ss.getSpaceInformation());
   ss.setPlanner(planner);
+
 
   ss.setup();
 
