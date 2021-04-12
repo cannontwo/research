@@ -150,14 +150,20 @@ oc::PathControl plan_to_goal(KinCarSystem& sys, KinematicCarEnvironment& env,
   auto si = ss.getSpaceInformation();
 
   si->setStateValidityChecker([&](const ob::State *state) {
+        // TODO Obstacle geometry
         return true;
       });
 
+  // TODO Rather than creating an ODESolver for KinCarSystem directly, should
+  // create a wrapper class that integrates PARL learned dynamics
+  
   auto odeSolver(std::make_shared<oc::ODEBasicSolver<>>(si, 
         [&](const oc::ODESolver::StateType& q, 
             const oc::Control* control, oc::ODESolver::StateType& qdot){
           sys.ompl_ode_adaptor(q, control, qdot);
         }));
+
+  // Make it clear that KinCarSystem is discrete-time
   si->setStatePropagator(oc::ODESolver::getStatePropagator(odeSolver,
         KinCarSystem::ompl_post_integration));
 
@@ -173,9 +179,10 @@ oc::PathControl plan_to_goal(KinCarSystem& sys, KinematicCarEnvironment& env,
 
   ss.setStartAndGoalStates(start, goal, 0.05);
 
+  // Necessary for discrete-time model
+  // TODO Get timestep from system
+  ss.getSpaceInformation()->setPropagationStepSize(env.get_time_step());
   log_info("Propagation step size is", ss.getSpaceInformation()->getPropagationStepSize());
-  ss.getSpaceInformation()->setPropagationStepSize(0.01);
-  log_info("Propagation step size is now", ss.getSpaceInformation()->getPropagationStepSize());
 
   auto planner = std::make_shared<oc::SST>(ss.getSpaceInformation());
   ss.setPlanner(planner);

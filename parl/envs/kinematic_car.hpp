@@ -92,7 +92,7 @@ namespace cannon {
 
           virtual std::tuple<VectorXd, double, bool> step(VectorXd control) override {
             if (control.size() != 2)
-              throw std::runtime_error("Control passed to inverted pendulum had wrong dimension.");
+              throw std::runtime_error("Control passed to kinematic car had wrong dimension.");
 
             double reward;
             std::tie(state_, reward) = kc_.step(control[0], control[1]);
@@ -112,8 +112,8 @@ namespace cannon {
             render_x_.store(state_[0]);
             render_y_.store(state_[1]);
             render_th_.store(state_[2]);
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
 #endif
+            std::this_thread::sleep_for(std::chrono::duration<double, std::ratio<1>>(kc_.time_step));
           }
 
           virtual VectorXd reset() override {
@@ -130,6 +130,10 @@ namespace cannon {
 
           virtual void register_ep_reward(float ep_reward) override {
             reward_queue_.push(ep_reward);
+          }
+
+          double get_time_step() {
+            return kc_.time_step;
           }
 
         private:
