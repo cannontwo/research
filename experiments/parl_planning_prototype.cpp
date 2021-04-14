@@ -9,6 +9,7 @@
 #include <cannon/physics/systems/kinematic_car.hpp>
 #include <cannon/research/parl/parl.hpp>
 #include <cannon/research/parl/hyperparams.hpp>
+#include <cannon/research/parl_planning/aggregate_model.hpp>
 
 using namespace cannon::research::parl;
 using namespace cannon::physics::systems;
@@ -49,14 +50,14 @@ MatrixXd make_error_system_refs(oc::PathControl& path) {
   return refs;
 }
 
-void execute_control_for_duration(KinematicCarEnvironment& env, Parl& parl, const Vector3d& s,
+void execute_control_for_duration(std::shared_ptr<KinematicCarEnvironment> env, std::shared_ptr<Parl> parl, const Vector3d& s,
     const Vector3d& next_s, const Vector2d& c, 
     double start_time, std::chrono::milliseconds control_dur, bool learn=true) {
 
   auto start = std::chrono::steady_clock::now();
   std::chrono::milliseconds cur_dur;
 
-  Vector4d error_state = compute_error_state(s, env.get_state(), 0.0);
+  Vector4d error_state = compute_error_state(s, env->get_state(), 0.0);
 
   VectorXd new_state;
   double reward;
@@ -64,13 +65,14 @@ void execute_control_for_duration(KinematicCarEnvironment& env, Parl& parl, cons
   do {
     Vector2d parl_c = Vector2d::Zero();
     if (learn) {
-      parl_c = parl.get_action(error_state);
+      parl_c = parl->get_action(error_state);
     } 
 
     //log_info("PARL action is", parl_c);
 
-    std::tie(new_state, reward, done) = env.step(c + parl_c);
-    env.render();
+    // TODO Fix reward computation---should be relative to path
+    std::tie(new_state, reward, done) = env->step(c + parl_c);
+    env->render();
 
     // TODO Check for ICS? Or somehow else execute emergency stopping maneuver?
 
@@ -82,7 +84,7 @@ void execute_control_for_duration(KinematicCarEnvironment& env, Parl& parl, cons
 
     // Train PARL using error states
     if (learn) {
-      parl.process_datum(error_state, parl_c, reward, new_error_state, done);
+      parl->process_datum(error_state, parl_c, reward, new_error_state, done);
     }
 
     error_state = new_error_state;
@@ -93,8 +95,8 @@ void execute_control_for_duration(KinematicCarEnvironment& env, Parl& parl, cons
 
 }
 
-void execute_path(KinematicCarEnvironment& env, oc::PathControl& path, 
-    Parl& parl, double tracking_threshold=0.5) {
+void execute_path(std::shared_ptr<KinematicCarEnvironment> env, oc::PathControl& path, 
+    std::shared_ptr<Parl> parl, double tracking_threshold=0.5) {
   std::vector<ob::State*> states = path.getStates();
   std::vector<oc::Control*> controls = path.getControls();
   std::vector<double> durations = path.getControlDurations();
@@ -115,7 +117,7 @@ void execute_path(KinematicCarEnvironment& env, oc::PathControl& path,
     }
 
     // Break path tracking if state error greater than threshold
-    double path_error = (s - env.get_state()).norm();
+    double path_error = (s - env->get_state()).norm();
     log_info("At step", i, "xy path error is", path_error);
     if (path_error > tracking_threshold) {
       // TODO This implicitly assumes that there is no autonomous dynamical
@@ -141,12 +143,12 @@ void execute_path(KinematicCarEnvironment& env, oc::PathControl& path,
   Vector2d goal;
   goal[0] = 1.0;
   goal[1] = 1.0;
-  log_info("Goal error on real system is", (env.get_state().head(2) - goal).norm());
+  log_info("Goal error on real system is", (env->get_state().head(2) - goal).norm());
 }
 
-oc::PathControl plan_to_goal(KinCarSystem& sys, KinematicCarEnvironment& env,
+oc::PathControl plan_to_goal(KinCarSystem& sys, std::shared_ptr<KinematicCarEnvironment> env,
     Vector3d& start_state, Vector3d& goal_state) {
-  oc::SimpleSetup ss(env.get_action_space());
+  oc::SimpleSetup ss(env->get_action_space());
   auto si = ss.getSpaceInformation();
 
   si->setStateValidityChecker([&](const ob::State *state) {
@@ -167,12 +169,12 @@ oc::PathControl plan_to_goal(KinCarSystem& sys, KinematicCarEnvironment& env,
   si->setStatePropagator(oc::ODESolver::getStatePropagator(odeSolver,
         KinCarSystem::ompl_post_integration));
 
-  ob::ScopedState<ob::SE2StateSpace> start(env.get_state_space());
+  ob::ScopedState<ob::SE2StateSpace> start(env->get_state_space());
   start->setX(start_state[0]);
   start->setY(start_state[1]);
   start->setYaw(start_state[2]);
 
-  ob::ScopedState<ob::SE2StateSpace> goal(env.get_state_space());
+  ob::ScopedState<ob::SE2StateSpace> goal(env->get_state_space());
   goal->setX(goal_state[0]);
   goal->setY(goal_state[1]);
   goal->setYaw(goal_state[2]);
@@ -180,13 +182,11 @@ oc::PathControl plan_to_goal(KinCarSystem& sys, KinematicCarEnvironment& env,
   ss.setStartAndGoalStates(start, goal, 0.05);
 
   // Necessary for discrete-time model
-  // TODO Get timestep from system
-  ss.getSpaceInformation()->setPropagationStepSize(env.get_time_step());
+  ss.getSpaceInformation()->setPropagationStepSize(env->get_time_step());
   log_info("Propagation step size is", ss.getSpaceInformation()->getPropagationStepSize());
 
   auto planner = std::make_shared<oc::SST>(ss.getSpaceInformation());
   ss.setPlanner(planner);
-
 
   ss.setup();
 
@@ -201,7 +201,7 @@ oc::PathControl plan_to_goal(KinCarSystem& sys, KinematicCarEnvironment& env,
   }
 }
 
-std::shared_ptr<ob::StateSpace> make_error_state_space(const Environment& env, double duration) {
+std::shared_ptr<ob::StateSpace> make_error_state_space(std::shared_ptr<Environment> env, double duration) {
   auto time_space = std::make_shared<ob::RealVectorStateSpace>(1);
   ob::RealVectorBounds b(1);
   b.setLow(0.0);
@@ -210,7 +210,7 @@ std::shared_ptr<ob::StateSpace> make_error_state_space(const Environment& env, d
   time_space->setup();
 
   auto cspace = std::make_shared<ob::CompoundStateSpace>();
-  cspace->addSubspace(env.get_state_space(), 1.0);
+  cspace->addSubspace(env->get_state_space(), 1.0);
   cspace->addSubspace(time_space, 1.0);
   cspace->setup();
 
@@ -218,10 +218,10 @@ std::shared_ptr<ob::StateSpace> make_error_state_space(const Environment& env, d
 }
 
 int main() {
-  KinematicCarEnvironment env;
+  auto env = std::make_shared<KinematicCarEnvironment>();
 
   // Planning for a different length of car
-  KinCarSystem sys(0.5);
+  KinCarSystem nominal_sys(0.5);
 
   Vector3d start = Vector3d::Zero();
   Vector3d goal;
@@ -229,14 +229,23 @@ int main() {
   goal[1] = 1.0;
   goal[2] = 0.0;
 
-  while ((env.get_state() - goal).norm() > 0.1) {
-    start = env.get_state();
-    auto path = plan_to_goal(sys, env, start, goal);
+  MatrixX2d state_space_bounds = env->get_state_space_bounds();
+
+  AggregateModel planning_sys(env->get_state_space()->getDimension(),
+      env->get_action_space()->getDimension(),
+      10,
+      state_space_bounds,
+      env->get_time_step());
+
+  while ((env->get_state() - goal).norm() > 0.1) {
+    start = env->get_state();
+    auto path = plan_to_goal(nominal_sys, env, start, goal);
 
     // TODO Do we want to adjust bounds on action space?
     Hyperparams params;
     params.load_config("/home/cannon/Documents/cannon/cannon/research/experiments/parl_configs/r10c10_kc.yaml"); 
-    Parl parl(make_error_state_space(env, path.length()), env.get_action_space(),
+    auto parl = std::make_shared<Parl>(make_error_state_space(env,
+          path.length()), env->get_action_space(),
         make_error_system_refs(path), params);
 
     execute_path(env, path, parl);
@@ -245,6 +254,7 @@ int main() {
     // This could just be a decorator on the original model that looks up the
     // learned PARL model for a particular region, but the learned PARL model
     // needs to be processed after the path is executed.
+    planning_sys.process_path_parl(env, parl, path);
   }
 
   log_info("Made it to goal!");

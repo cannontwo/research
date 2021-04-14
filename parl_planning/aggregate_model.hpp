@@ -28,8 +28,11 @@ namespace cannon {
         public:
           AggregateModel() = delete;
 
+          // TODO Aggregate model needs to also wrap nominal model in order to
+          // be used for planning, and to implement the ODESolver interface
+          // that OMPL expects.
           AggregateModel(unsigned int state_dim, unsigned int action_dim,
-              unsigned int grid_size, Matrix2Xd& bounds, double time_delta) :
+              unsigned int grid_size, MatrixX2d& bounds, double time_delta) :
             state_dim_(state_dim), action_dim_(action_dim),
             grid_size_(grid_size), bounds_(bounds), time_delta_(time_delta), parameters_(vector_comp) {
 
@@ -62,7 +65,7 @@ namespace cannon {
           unsigned int action_dim_;
           unsigned int grid_size_;
 
-          Matrix2Xd bounds_;
+          MatrixX2d bounds_;
           VectorXd cell_extent_;
 
           double time_delta_;

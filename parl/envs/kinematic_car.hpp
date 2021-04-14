@@ -136,6 +136,21 @@ namespace cannon {
             return kc_.time_step;
           }
 
+          // TODO Generalize to interface?
+          MatrixX2d get_state_space_bounds() {
+            MatrixX2d ret_bounds = MatrixX2d::Zero(3, 2);
+            auto ss_bounds = state_space_->getBounds();
+
+            ret_bounds(0, 0) = ss_bounds.low[0];
+            ret_bounds(0, 1) = ss_bounds.high[0];
+            ret_bounds(1, 0) = ss_bounds.low[1];
+            ret_bounds(1, 1) = ss_bounds.high[1];
+            ret_bounds(2, 0) = -M_PI;
+            ret_bounds(2, 1) = M_PI;
+
+            return ret_bounds;
+          }
+
         private:
 #ifdef CANNON_BUILD_GRAPHICS
           void start_rendering_thread_() {
