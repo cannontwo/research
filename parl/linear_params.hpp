@@ -33,8 +33,6 @@ namespace cannon {
           return *this;
         }
 
-        ~LinearParams() {}
-
         LinearParams(const MatrixXd& A, const MatrixXd& B, const VectorXd c,
             unsigned int num_data) {
           assert(c.size() == A.rows());
@@ -59,6 +57,8 @@ namespace cannon {
           c_ = VectorXd::Zero(state_dim_);
           num_data_ = 0;
         }
+
+        ~LinearParams() {}
 
         // Merge another LinearParams object via data-weighted averaging
         void merge(const LinearParams& o) {

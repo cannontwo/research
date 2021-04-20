@@ -24,16 +24,14 @@ namespace cannon {
 
       bool vector_comp(const VectorXu& v1, const VectorXu& v2);
 
-      class AggregateModel {
+      class AggregateModel : public System {
         public:
           AggregateModel() = delete;
 
-          // TODO Aggregate model needs to also wrap nominal model in order to
-          // be used for planning, and to implement the ODESolver interface
-          // that OMPL expects.
-          AggregateModel(unsigned int state_dim, unsigned int action_dim,
-              unsigned int grid_size, MatrixX2d& bounds, double time_delta) :
-            state_dim_(state_dim), action_dim_(action_dim),
+          AggregateModel(std::shared_ptr<System> nominal_model, unsigned int
+              state_dim, unsigned int action_dim, unsigned int grid_size,
+              MatrixX2d& bounds, double time_delta) :
+            nominal_model_(nominal_model), state_dim_(state_dim), action_dim_(action_dim),
             grid_size_(grid_size), bounds_(bounds), time_delta_(time_delta), parameters_(vector_comp) {
 
             assert(bounds_.rows() == state_dim_);
@@ -49,6 +47,11 @@ namespace cannon {
             }
           }
 
+          virtual void operator()(const VectorXd& s, VectorXd& dsdt, const double t) override;
+
+          virtual void ompl_ode_adaptor(const oc::ODESolver::StateType& q,
+              const oc::Control* control, oc::ODESolver::StateType& qdot) override;
+
           void add_local_model(const RLSFilter& model, const VectorXd&
               ref_state, const VectorXd& next_ref_state, 
               const VectorXd& ref_control, double tau, double tau_delta);
@@ -56,11 +59,13 @@ namespace cannon {
           void process_path_parl(std::shared_ptr<Environment> env,
               std::shared_ptr<Parl> model, oc::PathControl& path);
 
-          // TODO Write function to use this model for planning, in combination with nominal model
+          LinearParams get_local_model_for_state(const VectorXd& state);
 
           VectorXu get_grid_coords(const VectorXd& query) const;
 
         private:
+          std::shared_ptr<System> nominal_model_;
+
           unsigned int state_dim_;
           unsigned int action_dim_;
           unsigned int grid_size_;

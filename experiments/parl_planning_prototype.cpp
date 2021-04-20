@@ -70,7 +70,7 @@ void execute_control_for_duration(std::shared_ptr<KinematicCarEnvironment> env, 
 
     //log_info("PARL action is", parl_c);
 
-    // TODO Fix reward computation---should be relative to path
+    // TODO Fix reward computation---should be relative to path, not directed at goal
     std::tie(new_state, reward, done) = env->step(c + parl_c);
     env->render();
 
@@ -146,13 +146,13 @@ void execute_path(std::shared_ptr<KinematicCarEnvironment> env, oc::PathControl&
   log_info("Goal error on real system is", (env->get_state().head(2) - goal).norm());
 }
 
-oc::PathControl plan_to_goal(KinCarSystem& sys, std::shared_ptr<KinematicCarEnvironment> env,
+oc::PathControl plan_to_goal(std::shared_ptr<System> sys, std::shared_ptr<KinematicCarEnvironment> env,
     Vector3d& start_state, Vector3d& goal_state) {
   oc::SimpleSetup ss(env->get_action_space());
   auto si = ss.getSpaceInformation();
 
   si->setStateValidityChecker([&](const ob::State *state) {
-        // TODO Obstacle geometry
+        // TODO Make real validity checker with obstacle geometry
         return true;
       });
 
@@ -162,7 +162,7 @@ oc::PathControl plan_to_goal(KinCarSystem& sys, std::shared_ptr<KinematicCarEnvi
   auto odeSolver(std::make_shared<oc::ODEBasicSolver<>>(si, 
         [&](const oc::ODESolver::StateType& q, 
             const oc::Control* control, oc::ODESolver::StateType& qdot){
-          sys.ompl_ode_adaptor(q, control, qdot);
+          sys->ompl_ode_adaptor(q, control, qdot);
         }));
 
   // Make it clear that KinCarSystem is discrete-time
@@ -221,7 +221,7 @@ int main() {
   auto env = std::make_shared<KinematicCarEnvironment>();
 
   // Planning for a different length of car
-  KinCarSystem nominal_sys(0.5);
+  auto nominal_sys = std::make_shared<KinCarSystem>(0.5);
 
   Vector3d start = Vector3d::Zero();
   Vector3d goal;
@@ -231,17 +231,18 @@ int main() {
 
   MatrixX2d state_space_bounds = env->get_state_space_bounds();
 
-  AggregateModel planning_sys(env->get_state_space()->getDimension(),
-      env->get_action_space()->getDimension(),
-      10,
-      state_space_bounds,
+  
+  auto planning_sys = std::make_shared<AggregateModel>(nominal_sys,
+      env->get_state_space()->getDimension(),
+      env->get_action_space()->getDimension(), 10, state_space_bounds,
       env->get_time_step());
 
   while ((env->get_state() - goal).norm() > 0.1) {
     start = env->get_state();
-    auto path = plan_to_goal(nominal_sys, env, start, goal);
+    //auto path = plan_to_goal(nominal_sys, env, start, goal);
+    auto path = plan_to_goal(planning_sys, env, start, goal);
 
-    // TODO Do we want to adjust bounds on action space?
+    // TODO Do we want to adjust bounds on action space? State space?
     Hyperparams params;
     params.load_config("/home/cannon/Documents/cannon/cannon/research/experiments/parl_configs/r10c10_kc.yaml"); 
     auto parl = std::make_shared<Parl>(make_error_state_space(env,
@@ -250,11 +251,9 @@ int main() {
 
     execute_path(env, path, parl);
 
-    // TODO Update model used by planner to incorporate learned dynamics
-    // This could just be a decorator on the original model that looks up the
-    // learned PARL model for a particular region, but the learned PARL model
-    // needs to be processed after the path is executed.
-    planning_sys.process_path_parl(env, parl, path);
+    // Update model used by planner to incorporate dynamics learned while
+    // following this path.
+    planning_sys->process_path_parl(env, parl, path);
   }
 
   log_info("Made it to goal!");
