@@ -80,11 +80,11 @@ void AggregateModel::add_local_model(const RLSFilter& model, const VectorXd&
   VectorXu grid_coords = get_grid_coords(ref_state);
   auto iter = parameters_.find(grid_coords);
   if (iter != parameters_.end()) {
-    // There is no existing LinearParams object for grid_coords
-    parameters_.insert({grid_coords, tmp_param});
-  } else {
     // There is already a LinearParams, so we merge
     iter->second.merge(tmp_param);
+  } else {
+    // There is no existing LinearParams object for grid_coords
+    parameters_.insert({grid_coords, tmp_param});
   }
 }
 
@@ -125,9 +125,10 @@ LinearParams AggregateModel::get_local_model_for_state(const VectorXd& state) {
   if (iter != parameters_.end()) {
     // There is no existing LinearParams object for grid_coords, so we return a
     // zero-initialized LinearParams
-    return LinearParams(state_dim_, action_dim_);
+    return LinearParams(iter->second.A_, iter->second.B_, iter->second.c_,
+        iter->second.num_data_);
   } else {
-    return iter->second;
+    return LinearParams(state_dim_, action_dim_);
   }
 }
 
