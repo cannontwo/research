@@ -116,7 +116,8 @@ void execute_path(std::shared_ptr<KinematicCarEnvironment> env, oc::PathControl&
       next_s[2] = states[i+1]->as<ob::SE2StateSpace::StateType>()->getYaw();
     }
 
-    // Break path tracking if state error greater than threshold
+    // Break path tracking if state error greater than threshold. This is a
+    // check at each waypoint.
     double path_error = (s - env->get_state()).norm();
     log_info("At step", i, "xy path error is", path_error);
     if (path_error > tracking_threshold) {
@@ -151,9 +152,9 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys, std::shared_ptr<Kinema
   oc::SimpleSetup ss(env->get_action_space());
   auto si = ss.getSpaceInformation();
 
-  si->setStateValidityChecker([&](const ob::State *state) {
+  si->setStateValidityChecker([si](const ob::State *state) {
         // TODO Make real validity checker with obstacle geometry
-        return true;
+        return si->satisfiesBounds(state);
       });
 
   // TODO Rather than creating an ODESolver for KinCarSystem directly, should

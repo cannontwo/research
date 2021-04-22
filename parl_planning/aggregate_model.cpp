@@ -6,18 +6,24 @@ void AggregateModel::operator()(const VectorXd& s, VectorXd& dsdt, const double 
 
   (*nominal_model_)(s, dsdt, t);
 
-  const VectorXd x = VectorXd::Zero(state_dim_);
-  const VectorXd u = VectorXd::Zero(state_dim_);
+  assert(s.size() == state_dim_ + action_dim_);
+
+  const VectorXd x = s.head(state_dim_);
+  const VectorXd u = s.tail(action_dim_);
 
   // Get appropriate local learned model
   LinearParams learned_params = get_local_model_for_state(x);
 
   // Since we return a zero-initialized LinearParams if the model is not found
   // in parameters_, this works correctly when we have no data.
+  
+  // TODO Improper learned models can overpower the nominal model and make
+  // planning fail. What is a principled way to tackle this?
   VectorXd learned_part = (learned_params.A_ * x) + (learned_params.B_ * u) + learned_params.c_;
+  log_info("Learned part is", learned_part);
 
   // Adjust for the fact that the learned model is discrete-time (with
-  // time step = time_delta_) so that integration works correclty
+  // time step = time_delta_) so that integration works correctly
   dsdt += learned_part / time_delta_;
   
 }
@@ -95,11 +101,42 @@ void AggregateModel::process_path_parl(std::shared_ptr<Environment> env,
   std::vector<oc::Control*> controls = path.getControls();
   std::vector<double> durations = path.getControlDurations();
 
+  double accumulated_time = 0.0;
+
   for (unsigned int i = 0; i < controls.size(); i++) {
     VectorXd c = get_control_from_ompl_control(env, controls[i]);
+
+    ob::ScopedState<> w_state (path.getSpaceInformation()->getStateSpace());
+    w_state = states[i];
+    VectorXd waypoint = VectorXd::Zero(state_dim_);
+    for (unsigned int j = 0; j < state_dim_; j++) { 
+      waypoint[j] = w_state.reals()[j];
+    }
+
+    VectorXd next_waypoint = waypoint;
+    if (i < controls.size() - 1) {
+      ob::ScopedState<> wn_state (path.getSpaceInformation()->getStateSpace());
+      wn_state = states[i+1];
+      for (unsigned int j = 0; j < state_dim_; j++) { 
+        next_waypoint[j] = w_state.reals()[j];
+      }
+    }
+
+    // Get local model in terms of path time
+    accumulated_time += 0.5 * durations[i];
+    VectorXd query = VectorXd::Zero(state_dim_ + 1);
+    query[state_dim_] = accumulated_time;
+    accumulated_time += 0.5 * durations[i];
+
+    unsigned int ref_idx = model->get_nearest_ref_idx(query);
+    auto local_model = model->dynamics_models_[ref_idx];
     
-    // TODO Finding appropriate waypoints, locating local parl model, computing tau/tau_delta
-    //add_local_model(local_model, waypoint, next_waypoint, c, tau, tau_delta);
+    // Assuming that our data have mean that is halfway along this path
+    // segment. This may not be a good assumption.
+    double tau = 0.5;
+    double tau_delta = time_delta_ / durations[i];
+
+    add_local_model(local_model, waypoint, next_waypoint, c, tau, tau_delta);
   }
 
 }
@@ -107,10 +144,12 @@ void AggregateModel::process_path_parl(std::shared_ptr<Environment> env,
 VectorXu AggregateModel::get_grid_coords(const VectorXd& query) const {
   assert(query.size() == state_dim_);
 
+  log_info("Query is", query);
+
   VectorXu coords(state_dim_);
 
   for (unsigned int i = 0; i < state_dim_; i++) {
-    coords[i] = (unsigned int)floor(query[i] / cell_extent_[i]);
+    coords[i] = (unsigned int)floor((query[i] - bounds_(i, 0)) / cell_extent_[i]);
 
     if (coords[i] >= grid_size_)
       throw std::runtime_error("Passed query point outside state bounds");
@@ -120,14 +159,19 @@ VectorXu AggregateModel::get_grid_coords(const VectorXd& query) const {
 }
 
 LinearParams AggregateModel::get_local_model_for_state(const VectorXd& state) {
-  VectorXu grid_coords = get_grid_coords(state);
-  auto iter = parameters_.find(grid_coords);
-  if (iter != parameters_.end()) {
-    // There is no existing LinearParams object for grid_coords, so we return a
-    // zero-initialized LinearParams
-    return LinearParams(iter->second.A_, iter->second.B_, iter->second.c_,
-        iter->second.num_data_);
-  } else {
+  try {
+    VectorXu grid_coords = get_grid_coords(state);
+
+    auto iter = parameters_.find(grid_coords);
+    if (iter != parameters_.end()) {
+      return LinearParams(iter->second.A_, iter->second.B_, iter->second.c_,
+          iter->second.num_data_);
+    } else {
+      return LinearParams(state_dim_, action_dim_);
+    }
+  } catch (...) {
+    // We can throw an exception if the input state is out of bounds, but in
+    // this case we just return zero dynamics
     return LinearParams(state_dim_, action_dim_);
   }
 }

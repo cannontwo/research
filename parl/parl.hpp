@@ -129,6 +129,8 @@ namespace cannon {
           std::vector<AutonomousLinearParams> get_min_sat_controlled_system();
           std::vector<AutonomousLinearParams> get_max_sat_controlled_system();
 
+          friend class AggregateModel;
+
         private:
           VectorXd make_combined_vec_(const VectorXd& state, const VectorXd& action);
           VectorXd make_local_state_(const VectorXd& global_state);
