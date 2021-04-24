@@ -30,7 +30,6 @@ std::vector<double> get_ref_point_times(oc::PathControl& path) {
   
   double accumulated_dur = 0.0;
   for (unsigned int i = 0; i < durations.size(); i++) {
-    log_info("Found planned duration", durations[i]);
     points.push_back(accumulated_dur + (0.5 * durations[i])); 
     accumulated_dur += durations[i];
   }
@@ -55,9 +54,9 @@ void execute_control_for_duration(std::shared_ptr<KinematicCarEnvironment> env, 
     double start_time, std::chrono::milliseconds control_dur, bool learn=true) {
 
   auto start = std::chrono::steady_clock::now();
-  std::chrono::milliseconds cur_dur;
+  std::chrono::milliseconds cur_dur(0);
 
-  Vector4d error_state = compute_error_state(s, env->get_state(), 0.0);
+  Vector4d error_state = compute_error_state(s, env->get_state(), start_time);
 
   VectorXd new_state;
   double reward;
@@ -104,7 +103,7 @@ void execute_path(std::shared_ptr<KinematicCarEnvironment> env, oc::PathControl&
 
   double accumulated_dur = 0.0;
   for (unsigned int i = 0; i < controls.size(); i++) {
-    Vector3d s;
+    Vector3d s = Vector3d::Zero();
     s[0] = states[i]->as<ob::SE2StateSpace::StateType>()->getX();
     s[1] = states[i]->as<ob::SE2StateSpace::StateType>()->getY();
     s[2] = states[i]->as<ob::SE2StateSpace::StateType>()->getYaw();

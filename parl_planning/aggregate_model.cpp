@@ -17,15 +17,12 @@ void AggregateModel::operator()(const VectorXd& s, VectorXd& dsdt, const double 
   // Since we return a zero-initialized LinearParams if the model is not found
   // in parameters_, this works correctly when we have no data.
   
-  // TODO Improper learned models can overpower the nominal model and make
-  // planning fail. What is a principled way to tackle this?
+  // TODO May want to reweight this based on uncertainty in model
   VectorXd learned_part = (learned_params.A_ * x) + (learned_params.B_ * u) + learned_params.c_;
-  log_info("Learned part is", learned_part);
 
   // Adjust for the fact that the learned model is discrete-time (with
   // time step = time_delta_) so that integration works correctly
   dsdt += learned_part / time_delta_;
-  
 }
 
 void AggregateModel::ompl_ode_adaptor(const oc::ODESolver::StateType& q,
@@ -66,6 +63,10 @@ void AggregateModel::add_local_model(const RLSFilter& model, const VectorXd&
   assert(tau_delta >= 0.0);
   assert(tau_delta <= 1.0);
 
+  if (model.get_num_data() == 0) {
+    return;
+  }
+
   MatrixXd theta = model.get_identified_mats().first;
   assert(theta.rows() == state_dim_);
   assert(theta.cols() == state_dim_ + action_dim_);
@@ -80,6 +81,8 @@ void AggregateModel::add_local_model(const RLSFilter& model, const VectorXd&
   VectorXd interp_state = ref_state + tau * (next_ref_state - ref_state);
   VectorXd next_interp_state = interp_state + tau_delta * (next_ref_state - ref_state);
   VectorXd c_est = next_interp_state - (A_hat * interp_state) - (B_hat * ref_control) - c_hat;
+  
+  //log_info("Adding", model.get_num_data(), "datum model with A_hat", A_hat, ", B_hat ", B_hat, ", c_est", c_est);
 
   LinearParams tmp_param(A_hat, -B_hat, c_est, model.get_num_data());
 
@@ -136,6 +139,7 @@ void AggregateModel::process_path_parl(std::shared_ptr<Environment> env,
     double tau = 0.5;
     double tau_delta = time_delta_ / durations[i];
 
+    //log_info("Adding local model for ref", i, "/", controls.size());
     add_local_model(local_model, waypoint, next_waypoint, c, tau, tau_delta);
   }
 
@@ -144,7 +148,7 @@ void AggregateModel::process_path_parl(std::shared_ptr<Environment> env,
 VectorXu AggregateModel::get_grid_coords(const VectorXd& query) const {
   assert(query.size() == state_dim_);
 
-  log_info("Query is", query);
+  //log_info("Query is", query);
 
   VectorXu coords(state_dim_);
 

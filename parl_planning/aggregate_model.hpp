@@ -47,6 +47,8 @@ namespace cannon {
             }
           }
 
+          virtual ~AggregateModel() {}
+
           virtual void operator()(const VectorXd& s, VectorXd& dsdt, const double t) override;
 
           virtual void ompl_ode_adaptor(const oc::ODESolver::StateType& q,
