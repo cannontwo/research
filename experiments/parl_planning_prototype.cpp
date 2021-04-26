@@ -59,8 +59,8 @@ void execute_control_for_duration(std::shared_ptr<KinematicCarEnvironment> env, 
   Vector4d error_state = compute_error_state(s, env->get_state(), start_time);
 
   VectorXd new_state;
-  double reward;
   bool done;
+  double total_seg_reward = 0.0;
   do {
     Vector2d parl_c = Vector2d::Zero();
     if (learn) {
@@ -69,8 +69,8 @@ void execute_control_for_duration(std::shared_ptr<KinematicCarEnvironment> env, 
 
     //log_info("PARL action is", parl_c);
 
-    // TODO Fix reward computation---should be relative to path, not directed at goal
-    std::tie(new_state, reward, done) = env->step(c + parl_c);
+    double env_reward;
+    std::tie(new_state, env_reward, done) = env->step(c + parl_c);
     env->render();
 
     // TODO Check for ICS? Or somehow else execute emergency stopping maneuver?
@@ -81,9 +81,17 @@ void execute_control_for_duration(std::shared_ptr<KinematicCarEnvironment> env, 
     double time = ((double)cur_dur.count() / 1000.0) + start_time;
     Vector4d new_error_state = compute_error_state(interp_ref, new_state, time);
 
+    // Reward for PARL is relative to path
+    double reward = -(interp_ref - new_state).norm();
+    total_seg_reward += reward;
+
     // Train PARL using error states
     if (learn) {
       parl->process_datum(error_state, parl_c, reward, new_error_state, done);
+
+      // TODO Is this the correct way to do controller updates? Do we want to
+      // cache learned PARL controllers as well?
+      parl->value_grad_update_controller(error_state);
     }
 
     error_state = new_error_state;
@@ -92,10 +100,12 @@ void execute_control_for_duration(std::shared_ptr<KinematicCarEnvironment> env, 
         std::chrono::steady_clock::now() - start);
   } while (control_dur > cur_dur);
 
+  // Plotting reward for an entire control segment
+  env->register_ep_reward(total_seg_reward);
 }
 
 void execute_path(std::shared_ptr<KinematicCarEnvironment> env, oc::PathControl& path, 
-    std::shared_ptr<Parl> parl, double tracking_threshold=0.5) {
+    std::shared_ptr<Parl> parl, double tracking_threshold=1.0) {
   std::vector<ob::State*> states = path.getStates();
   std::vector<oc::Control*> controls = path.getControls();
   std::vector<double> durations = path.getControlDurations();
@@ -156,9 +166,6 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys, std::shared_ptr<Kinema
         return si->satisfiesBounds(state);
       });
 
-  // TODO Rather than creating an ODESolver for KinCarSystem directly, should
-  // create a wrapper class that integrates PARL learned dynamics
-  
   auto odeSolver(std::make_shared<oc::ODEBasicSolver<>>(si, 
         [&](const oc::ODESolver::StateType& q, 
             const oc::Control* control, oc::ODESolver::StateType& qdot){
@@ -231,7 +238,6 @@ int main() {
 
   MatrixX2d state_space_bounds = env->get_state_space_bounds();
 
-  
   auto planning_sys = std::make_shared<AggregateModel>(nominal_sys,
       env->get_state_space()->getDimension(),
       env->get_action_space()->getDimension(), 10, state_space_bounds,

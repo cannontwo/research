@@ -22,7 +22,8 @@ void AggregateModel::operator()(const VectorXd& s, VectorXd& dsdt, const double 
 
   // Adjust for the fact that the learned model is discrete-time (with
   // time step = time_delta_) so that integration works correctly
-  dsdt += learned_part / time_delta_;
+  //dsdt += learned_part / time_delta_;
+  dsdt += learned_part;
 }
 
 void AggregateModel::ompl_ode_adaptor(const oc::ODESolver::StateType& q,

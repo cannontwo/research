@@ -109,7 +109,7 @@ void Runner::run() {
     double ep_reward = 0.0;
     VectorXd state = env_->reset();
 
-    for (int j =0; j < num_timesteps; j++) {
+    for (int j = 0; j < num_timesteps; j++) {
       VectorXd new_state;
       double reward;
       bool done;

@@ -240,7 +240,7 @@ namespace cannon {
                     ImGui::Text("Episode %d", eps);
                     ImGui::PlotLines("Rewards", reward_cbuf.data,
                         IM_ARRAYSIZE(reward_cbuf.data), reward_cbuf.offset, NULL,
-                        -1500, -100, ImVec2(0, 80));
+                        -100, -0, ImVec2(0, 80));
                     ImGui::End();
 
                     double x = render_x_.load();
