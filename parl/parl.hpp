@@ -15,6 +15,7 @@
 #include <cannon/geom/kd_tree_indexed.hpp>
 #include <cannon/control/affine_controller.hpp>
 #include <cannon/ml/piecewise_lstd.hpp>
+#include <cannon/ml/piecewise_recursive_lstd.hpp>
 #include <cannon/ml/rls.hpp>
 #include <cannon/research/parl/hyperparams.hpp>
 #include <cannon/research/parl/linear_params.hpp>
@@ -165,7 +166,8 @@ namespace cannon {
 
           std::vector<RLSFilter> dynamics_models_;
           std::vector<AffineController> controllers_;
-          PiecewiseLSTDFilter value_model_;
+          //PiecewiseLSTDFilter value_model_;
+          PiecewiseRecursiveLSTDFilter value_model_;
 
           KDTreeIndexed ref_tree_;
 
