@@ -30,9 +30,9 @@ namespace cannon {
 
           AggregateModel(std::shared_ptr<System> nominal_model, unsigned int
               state_dim, unsigned int action_dim, unsigned int grid_size,
-              MatrixX2d& bounds, double time_delta) :
+              MatrixX2d& bounds, double time_delta, bool learn=true) :
             nominal_model_(nominal_model), state_dim_(state_dim), action_dim_(action_dim),
-            grid_size_(grid_size), bounds_(bounds), time_delta_(time_delta), parameters_(vector_comp) {
+            grid_size_(grid_size), bounds_(bounds), time_delta_(time_delta), parameters_(vector_comp), learn_(learn) {
 
             assert(bounds_.rows() == state_dim_);
             assert(time_delta >= 0.0);
@@ -53,6 +53,8 @@ namespace cannon {
 
           virtual void ompl_ode_adaptor(const oc::ODESolver::StateType& q,
               const oc::Control* control, oc::ODESolver::StateType& qdot) override;
+
+          virtual std::tuple<MatrixXd, MatrixXd, VectorXd> get_linearization(const VectorXd& x) override;
 
           void add_local_model(const RLSFilter& model, const VectorXd&
               ref_state, const VectorXd& next_ref_state, 
@@ -80,6 +82,8 @@ namespace cannon {
           std::map<VectorXu, LinearParams, std::function<bool(const VectorXu&,
               const VectorXu&)>, aligned_allocator<std::pair<VectorXu,
             LinearParams>>> parameters_;
+
+          bool learn_;
 
       };
 

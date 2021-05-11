@@ -23,7 +23,8 @@ void AggregateModel::operator()(const VectorXd& s, VectorXd& dsdt, const double 
   // Adjust for the fact that the learned model is discrete-time (with
   // time step = time_delta_) so that integration works correctly
   //dsdt += learned_part / time_delta_;
-  dsdt += learned_part;
+  if (learn_) 
+    dsdt.head(state_dim_) += learned_part;
 }
 
 void AggregateModel::ompl_ode_adaptor(const oc::ODESolver::StateType& q,
@@ -52,6 +53,24 @@ void AggregateModel::ompl_ode_adaptor(const oc::ODESolver::StateType& q,
   }
 }
 
+std::tuple<MatrixXd, MatrixXd, VectorXd> AggregateModel::get_linearization(const VectorXd& x) {
+  MatrixXd A = MatrixXd::Zero(state_dim_, state_dim_);
+  MatrixXd B = MatrixXd::Zero(state_dim_, action_dim_);
+  VectorXd c = VectorXd::Zero(action_dim_);
+
+  MatrixXd nA, nB;
+  VectorXd nc;
+  std::tie(nA, nB, nc) = nominal_model_->get_linearization(x);
+
+  LinearParams learned_params = get_local_model_for_state(x);
+
+  A = learned_params.A_ + nA;
+  B = learned_params.B_ + nB;
+  c = learned_params.c_ + nc;
+
+  return std::make_tuple(A, B, c);
+}
+
 void AggregateModel::add_local_model(const RLSFilter& model, const VectorXd&
     ref_state, const VectorXd& next_ref_state, const VectorXd& ref_control,
     double tau, double tau_delta) {
@@ -69,14 +88,14 @@ void AggregateModel::add_local_model(const RLSFilter& model, const VectorXd&
   }
 
   MatrixXd theta = model.get_identified_mats().first;
-  assert(theta.rows() == state_dim_);
-  assert(theta.cols() == state_dim_ + action_dim_);
+  assert(theta.rows() == state_dim_ + 1); // Account for time dimension
+  assert(theta.cols() == state_dim_ + action_dim_ + 1);
 
-  VectorXd c_hat = model.get_identified_mats().second;
+  VectorXd c_hat = model.get_identified_mats().second.head(state_dim_);
   assert(c_hat.size() == state_dim_);
 
-  MatrixXd A_hat = theta.leftCols(state_dim_);
-  MatrixXd B_hat = theta.rightCols(action_dim_);
+  MatrixXd A_hat = theta.leftCols(state_dim_).topRows(state_dim_);
+  MatrixXd B_hat = theta.rightCols(action_dim_).topRows(state_dim_);
 
   // See https://www.overleaf.com/project/5fff4fe3176331cc9ab8472d
   VectorXd interp_state = ref_state + tau * (next_ref_state - ref_state);
@@ -84,8 +103,13 @@ void AggregateModel::add_local_model(const RLSFilter& model, const VectorXd&
   VectorXd c_est = next_interp_state - (A_hat * interp_state) - (B_hat * ref_control) - c_hat;
   
   //log_info("Adding", model.get_num_data(), "datum model with A_hat", A_hat, ", B_hat ", B_hat, ", c_est", c_est);
+  
+  MatrixXd A, B;
+  VectorXd c;
+  std::tie(A, B, c) = nominal_model_->get_linearization(interp_state);
 
-  LinearParams tmp_param(A_hat, -B_hat, c_est, model.get_num_data());
+  // Add params that is only delta between learned model and nominal model linearization
+  LinearParams tmp_param(A_hat - A, -B_hat - B, c_est - c, model.get_num_data());
 
   VectorXu grid_coords = get_grid_coords(ref_state);
   auto iter = parameters_.find(grid_coords);

@@ -14,6 +14,12 @@
 using namespace cannon::research::parl;
 using namespace cannon::physics::systems;
 
+static Vector2d goal = Vector2d::Ones();
+static int overall_timestep = 0;
+
+// Whether to do learning
+static bool learn = false;
+
 Vector4d compute_error_state(const Vector3d& ref, const Vector3d& actual, double time) {
   Vector3d diff = ref - actual;
   Vector4d ret;
@@ -49,9 +55,10 @@ MatrixXd make_error_system_refs(oc::PathControl& path) {
   return refs;
 }
 
-void execute_control_for_duration(std::shared_ptr<KinematicCarEnvironment> env, std::shared_ptr<Parl> parl, const Vector3d& s,
-    const Vector3d& next_s, const Vector2d& c, 
-    double start_time, std::chrono::milliseconds control_dur, bool learn=true) {
+void execute_control_for_duration(std::shared_ptr<KinematicCarEnvironment> env,
+    std::shared_ptr<Parl> parl, const Vector3d& s, const Vector3d& next_s,
+    const Vector2d& c, double start_time, std::chrono::milliseconds
+    control_dur, std::ostream& os) {
 
   auto start = std::chrono::steady_clock::now();
   std::chrono::milliseconds cur_dur(0);
@@ -72,6 +79,10 @@ void execute_control_for_duration(std::shared_ptr<KinematicCarEnvironment> env, 
     double env_reward;
     std::tie(new_state, env_reward, done) = env->step(c + parl_c);
     env->render();
+
+    overall_timestep++;
+
+    os << overall_timestep << "," << (new_state.head(2) - goal).norm() << std::endl;
 
     // TODO Check for ICS? Or somehow else execute emergency stopping maneuver?
 
@@ -105,7 +116,7 @@ void execute_control_for_duration(std::shared_ptr<KinematicCarEnvironment> env, 
 }
 
 void execute_path(std::shared_ptr<KinematicCarEnvironment> env, oc::PathControl& path, 
-    std::shared_ptr<Parl> parl, double tracking_threshold=1.0) {
+    std::shared_ptr<Parl> parl, std::ostream& os, double tracking_threshold=1.0) {
   std::vector<ob::State*> states = path.getStates();
   std::vector<oc::Control*> controls = path.getControls();
   std::vector<double> durations = path.getControlDurations();
@@ -146,13 +157,10 @@ void execute_path(std::shared_ptr<KinematicCarEnvironment> env, oc::PathControl&
     unsigned int duration_millis = std::floor(durations[i] * 1000);
     std::chrono::milliseconds control_dur(duration_millis);
     
-    execute_control_for_duration(env, parl, s, next_s, c, accumulated_dur, control_dur);
+    execute_control_for_duration(env, parl, s, next_s, c, accumulated_dur, control_dur, os);
     accumulated_dur += durations[i];
   }
 
-  Vector2d goal;
-  goal[0] = 1.0;
-  goal[1] = 1.0;
   log_info("Goal error on real system is", (env->get_state().head(2) - goal).norm());
 }
 
@@ -241,9 +249,30 @@ int main() {
   auto planning_sys = std::make_shared<AggregateModel>(nominal_sys,
       env->get_state_space()->getDimension(),
       env->get_action_space()->getDimension(), 10, state_space_bounds,
-      env->get_time_step());
+      env->get_time_step(), learn);
 
-  while ((env->get_state() - goal).norm() > 0.1) {
+  std::ofstream distance_file;
+
+  if (learn) {
+    std::string log_path = std::string("logs/parl_planning/learning/");
+    std::filesystem::create_directories(log_path);
+    distance_file.open(log_path + "/execution_distances_" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())
+        + ".csv", std::ios::trunc);
+  } else {
+    std::string log_path = std::string("logs/parl_planning/no_learning/");
+    std::filesystem::create_directories(log_path);
+    distance_file.open(log_path + "/execution_distances_" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())
+        + ".csv", std::ios::trunc);
+  }
+
+  distance_file << "timestep,distance" << std::endl;
+
+  // TODO Record closest approach to goal at each timestep up to max number of timesteps
+  // TODO Run planner without PARL as well
+
+  while ((env->get_state() - goal).norm() > 0.1 && overall_timestep < 1e3) {
     start = env->get_state();
     //auto path = plan_to_goal(nominal_sys, env, start, goal);
     auto path = plan_to_goal(planning_sys, env, start, goal);
@@ -255,12 +284,16 @@ int main() {
           path.length()), env->get_action_space(),
         make_error_system_refs(path), params);
 
-    execute_path(env, path, parl);
+    execute_path(env, path, parl, distance_file);
 
     // Update model used by planner to incorporate dynamics learned while
     // following this path.
-    planning_sys->process_path_parl(env, parl, path);
+    if (learn)
+      planning_sys->process_path_parl(env, parl, path);
   }
 
-  log_info("Made it to goal!");
+  if ((env->get_state() - goal).norm() < 0.1)
+    log_info("Made it to goal!");
+  else
+    log_info("Maximum timesteps exceeded");
 }
