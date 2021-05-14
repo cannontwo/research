@@ -55,8 +55,9 @@ namespace cannon {
               throw std::runtime_error("PARL reference points have the wrong dimension");
             num_refs_ = refs_.cols();
 
-            if (seed != 0) {
-              // TODO Set seed
+            if (seed_ != 0) {
+              // Set seed across all instances of multivariate normal distribution
+              MultivariateNormal::set_seed(seed_);
             }
 
             if (params_.use_line_search && params_.controller_learning_rate != 1.0) {

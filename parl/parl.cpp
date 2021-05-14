@@ -106,6 +106,9 @@ VectorXd Parl::get_action(const VectorXd& state, bool testing) {
 
   if (!testing) {
     MultivariateNormal d(MatrixXd::Identity(action_dim_, action_dim_));
+    if (seed_ != 0)
+      d = MultivariateNormal(MatrixXd::Identity(action_dim_, action_dim_));
+
     noise_part = d.sample() * action_noise_scale_;
   }
 

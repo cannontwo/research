@@ -10,15 +10,18 @@
 #include <cannon/research/parl/parl.hpp>
 #include <cannon/research/parl/hyperparams.hpp>
 #include <cannon/research/parl_planning/aggregate_model.hpp>
+#include <cannon/utils/experiment_writer.hpp>
+#include <cannon/utils/experiment_runner.hpp>
 
 using namespace cannon::research::parl;
 using namespace cannon::physics::systems;
+using namespace cannon::utils;
 
-static Vector2d goal = Vector2d::Ones();
+static Vector2d s_goal = Vector2d::Ones();
 static int overall_timestep = 0;
 
 // Whether to do learning
-static bool learn = false;
+static bool learn = true;
 
 Vector4d compute_error_state(const Vector3d& ref, const Vector3d& actual, double time) {
   Vector3d diff = ref - actual;
@@ -58,11 +61,9 @@ MatrixXd make_error_system_refs(oc::PathControl& path) {
 void execute_control_for_duration(std::shared_ptr<KinematicCarEnvironment> env,
     std::shared_ptr<Parl> parl, const Vector3d& s, const Vector3d& next_s,
     const Vector2d& c, double start_time, std::chrono::milliseconds
-    control_dur, std::ostream& os) {
+    control_dur, ExperimentWriter& w) {
 
-  auto start = std::chrono::steady_clock::now();
-  std::chrono::milliseconds cur_dur(0);
-
+  double cur_dur = 0.0;
   Vector4d error_state = compute_error_state(s, env->get_state(), start_time);
 
   VectorXd new_state;
@@ -75,22 +76,32 @@ void execute_control_for_duration(std::shared_ptr<KinematicCarEnvironment> env,
     } 
 
     //log_info("PARL action is", parl_c);
+    
+    std::stringstream ss;
+    ss << overall_timestep << "," << env->get_state()[0] << "," << env->get_state()[1] << "," << env->get_state()[2] << "," << (c + parl_c)[0] << "," << (c + parl_c)[1];
+    w.write_line("executed_traj", ss.str());
 
     double env_reward;
     std::tie(new_state, env_reward, done) = env->step(c + parl_c);
-    env->render();
+    //env->render();
 
     overall_timestep++;
 
-    os << overall_timestep << "," << (new_state.head(2) - goal).norm() << std::endl;
+    ss.str("");
+    ss << overall_timestep << "," << (new_state.head(2) - s_goal).norm();
+    w.write_line("distances", ss.str());
 
     // TODO Check for ICS? Or somehow else execute emergency stopping maneuver?
 
     // Compute error coordinates for new_state
-    double t = (float)cur_dur.count() / (float)control_dur.count();
+    double t = cur_dur / (float)control_dur.count();
     Vector3d interp_ref = ((1.0 - t) * s) + (t * next_s);
-    double time = ((double)cur_dur.count() / 1000.0) + start_time;
+    double time = cur_dur + start_time;
     Vector4d new_error_state = compute_error_state(interp_ref, new_state, time);
+
+    ss.str("");
+    ss << overall_timestep << "," << interp_ref[0] << "," << interp_ref[1] << "," << interp_ref[2] << "," << c[0] << "," << c[1];
+    w.write_line("planned_traj", ss.str());
 
     // Reward for PARL is relative to path
     double reward = -(interp_ref - new_state).norm();
@@ -107,16 +118,15 @@ void execute_control_for_duration(std::shared_ptr<KinematicCarEnvironment> env,
 
     error_state = new_error_state;
 
-    cur_dur = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - start);
-  } while (control_dur > cur_dur);
+    cur_dur += env->get_time_step();
+  } while (control_dur.count() > cur_dur * 1000);
 
   // Plotting reward for an entire control segment
   env->register_ep_reward(total_seg_reward);
 }
 
 void execute_path(std::shared_ptr<KinematicCarEnvironment> env, oc::PathControl& path, 
-    std::shared_ptr<Parl> parl, std::ostream& os, double tracking_threshold=1.0) {
+    std::shared_ptr<Parl> parl, ExperimentWriter& w, double tracking_threshold=1.0) {
   std::vector<ob::State*> states = path.getStates();
   std::vector<oc::Control*> controls = path.getControls();
   std::vector<double> durations = path.getControlDurations();
@@ -150,22 +160,34 @@ void execute_path(std::shared_ptr<KinematicCarEnvironment> env, oc::PathControl&
       return;
     }
 
-    Vector2d c;
+    Vector2d c = Vector2d::Zero();
     c[0] = controls[i]->as<oc::RealVectorControlSpace::ControlType>()->values[0];
     c[1] = controls[i]->as<oc::RealVectorControlSpace::ControlType>()->values[1];
 
     unsigned int duration_millis = std::floor(durations[i] * 1000);
     std::chrono::milliseconds control_dur(duration_millis);
+
+    //log_info("Executing control", c, "for", control_dur.count(), "milliseconds");
     
-    execute_control_for_duration(env, parl, s, next_s, c, accumulated_dur, control_dur, os);
+    execute_control_for_duration(env, parl, s, next_s, c, accumulated_dur, control_dur, w);
     accumulated_dur += durations[i];
   }
 
-  log_info("Goal error on real system is", (env->get_state().head(2) - goal).norm());
+  log_info("Goal error on real system is", (env->get_state().head(2) - s_goal).norm());
 }
 
 oc::PathControl plan_to_goal(std::shared_ptr<System> sys, std::shared_ptr<KinematicCarEnvironment> env,
     Vector3d& start_state, Vector3d& goal_state) {
+  ob::ScopedState<ob::SE2StateSpace> start(env->get_state_space());
+  start->setX(start_state[0]);
+  start->setY(start_state[1]);
+  start->setYaw(start_state[2]);
+
+  ob::ScopedState<ob::SE2StateSpace> goal(env->get_state_space());
+  goal->setX(goal_state[0]);
+  goal->setY(goal_state[1]);
+  goal->setYaw(goal_state[2]);
+
   oc::SimpleSetup ss(env->get_action_space());
   auto si = ss.getSpaceInformation();
 
@@ -184,15 +206,6 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys, std::shared_ptr<Kinema
   si->setStatePropagator(oc::ODESolver::getStatePropagator(odeSolver,
         KinCarSystem::ompl_post_integration));
 
-  ob::ScopedState<ob::SE2StateSpace> start(env->get_state_space());
-  start->setX(start_state[0]);
-  start->setY(start_state[1]);
-  start->setYaw(start_state[2]);
-
-  ob::ScopedState<ob::SE2StateSpace> goal(env->get_state_space());
-  goal->setX(goal_state[0]);
-  goal->setY(goal_state[1]);
-  goal->setYaw(goal_state[2]);
 
   ss.setStartAndGoalStates(start, goal, 0.05);
 
@@ -212,7 +225,7 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys, std::shared_ptr<Kinema
 
     return ss.getSolutionPath();
   } else {
-    throw std::runtime_error("No solution found" );
+    return oc::PathControl(si);
   }
 }
 
@@ -232,7 +245,14 @@ std::shared_ptr<ob::StateSpace> make_error_state_space(std::shared_ptr<Environme
   return cspace;
 }
 
-int main() {
+void run_exp(ExperimentWriter& w, int seed) {
+  // Store seed for future reference
+  auto seed_file = w.get_file("seed.txt");
+  seed_file << seed;
+  seed_file.close();
+
+  overall_timestep = 0;
+
   auto env = std::make_shared<KinematicCarEnvironment>();
 
   // Planning for a different length of car
@@ -240,9 +260,11 @@ int main() {
 
   Vector3d start = Vector3d::Zero();
   Vector3d goal;
-  goal[0] = 1.0;
-  goal[1] = 1.0;
+  goal[0] = s_goal[0];
+  goal[1] = s_goal[1];
   goal[2] = 0.0;
+
+  env->reset(start);
 
   MatrixX2d state_space_bounds = env->get_state_space_bounds();
 
@@ -251,23 +273,8 @@ int main() {
       env->get_action_space()->getDimension(), 10, state_space_bounds,
       env->get_time_step(), learn);
 
-  std::ofstream distance_file;
-
-  if (learn) {
-    std::string log_path = std::string("logs/parl_planning/learning/");
-    std::filesystem::create_directories(log_path);
-    distance_file.open(log_path + "/execution_distances_" +
-        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())
-        + ".csv", std::ios::trunc);
-  } else {
-    std::string log_path = std::string("logs/parl_planning/no_learning/");
-    std::filesystem::create_directories(log_path);
-    distance_file.open(log_path + "/execution_distances_" +
-        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())
-        + ".csv", std::ios::trunc);
-  }
-
-  distance_file << "timestep,distance" << std::endl;
+  w.start_log("distances");
+  w.write_line("distances", "timestep,distance");
 
   // TODO Record closest approach to goal at each timestep up to max number of timesteps
   // TODO Run planner without PARL as well
@@ -275,16 +282,27 @@ int main() {
   while ((env->get_state() - goal).norm() > 0.1 && overall_timestep < 1e3) {
     start = env->get_state();
     //auto path = plan_to_goal(nominal_sys, env, start, goal);
+    
     auto path = plan_to_goal(planning_sys, env, start, goal);
+    if (path.getControlCount() == 0) {
+      log_info("No plan found");
+      break;
+    }
 
     // TODO Do we want to adjust bounds on action space? State space?
     Hyperparams params;
     params.load_config("/home/cannon/Documents/cannon/cannon/research/experiments/parl_configs/r10c10_kc.yaml"); 
     auto parl = std::make_shared<Parl>(make_error_state_space(env,
           path.length()), env->get_action_space(),
-        make_error_system_refs(path), params);
+        make_error_system_refs(path), params, seed);
 
-    execute_path(env, path, parl, distance_file);
+    w.start_log("planned_traj");
+    w.write_line("planned_traj", "timestep,statex,statey,stateth,controlv,controlth");
+
+    w.start_log("executed_traj");
+    w.write_line("executed_traj", "timestep,statex,statey,stateth,controlv,controlth");
+
+    execute_path(env, path, parl, w);
 
     // Update model used by planner to incorporate dynamics learned while
     // following this path.
@@ -296,4 +314,18 @@ int main() {
     log_info("Made it to goal!");
   else
     log_info("Maximum timesteps exceeded");
+}
+
+int main() {
+  std::string log_path;
+
+  if (learn) {
+    log_path = std::string("logs/parl_planning_exps/learning/");
+  } else {
+    log_path = std::string("logs/parl_planning_exps/no_learning/");
+  }
+
+  ExperimentRunner runner(log_path, 10, run_exp);
+
+  runner.run();
 }
