@@ -1,3 +1,5 @@
+#ifdef CANNON_BUILD_RESEARCH
+
 #include <catch2/catch.hpp>
 
 #include <cannon/research/parl/parl.hpp>
@@ -38,3 +40,5 @@ TEST_CASE("Parl", "[research]") {
 
   Parl p(s, a, refs, params);
 }
+
+#endif
