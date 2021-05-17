@@ -1,9 +1,13 @@
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 import sys
 import os
 import glob
+import math
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 
 def read_data(no_learning_folder, learning_folder):
     no_learning_runs = []
@@ -40,32 +44,61 @@ def read_data(no_learning_folder, learning_folder):
 
     return (no_learning_runs, learning_runs)
 
+def plot_distances(all_learning_df, all_no_learning_df, block=True):
+    plt.figure()
+    sns.lineplot(x='timestep', y='distance',
+            data=all_learning_df.reset_index(), label="PARL+Planning")
+    sns.lineplot(x='timestep', y='distance',
+            data=all_no_learning_df.reset_index(), label="Just Replanning")
+
+    plt.title("Distance to Goal Over Time")
+    plt.xlabel("Timestep")
+    plt.ylabel("Distance to Goal")
+    plt.legend();
+    plt.show(block=block)
+
+def compute_norm(x):
+    return math.sqrt(math.pow(x[0], 2) + math.pow(x[1], 2) + math.pow(x[2], 2))
+
+def make_traj_error_norm_df(run_dict):
+    planned_df = pd.concat(run_dict["planned"])
+    exec_df = pd.concat(run_dict["executed"])
+
+    planned_df.set_index("timestep", inplace=True)
+    exec_df.set_index("timestep", inplace=True)
+
+    diff_df = planned_df[["statex", "statey", "stateth"]] - exec_df[["statex", "statey", "stateth"]]
+    norm_df = diff_df.apply(compute_norm, axis=1)
+
+    return norm_df
+
+def plot_cumulative_error(no_learning_runs, learning_runs, block=True):
+    plt.figure()
+    all_no_learning_error_norms = pd.concat([make_traj_error_norm_df(r).cumsum() for r in no_learning_runs])
+    all_learning_error_norms = pd.concat([make_traj_error_norm_df(r).cumsum() for r in learning_runs])
+    sns.lineplot(data=all_no_learning_error_norms, label="Just Replanning")
+    sns.lineplot(data=all_learning_error_norms, label="PARL+Planning")
+
+    plt.title("Cumulative Trajectory Tracking Error")
+    plt.ylabel("Cumulative Error")
+    plt.xlabel("Timestep")
+    plt.legend()
+
+    plt.show(block=block)
+
 def run():
     if len(sys.argv) != 3:
-        print("Incorrect number of arguments passed. Pass <no_learning_folder> <learning_folder>")
+        print("Incorrect number of arguments entered. Pass <no_learning_folder> <learning_folder>")
         return
 
     no_learning_runs, learning_runs = read_data(sys.argv[1], sys.argv[2])
 
-    print(no_learning_runs)
-    print(learning_runs)
-
     # TODO Combine all plots
+    all_learning_dist_df = pd.concat([r["distances"] for r in learning_runs])
+    all_no_learning_dist_df = pd.concat([r["distances"] for r in no_learning_runs])
 
-    learning_runs[0]["distances"].plot(x="timestep", y="distance")
-    plt.title("PARL+Planning Goal Distance Over Time")
-    plt.xlabel("Timestep")
-    plt.ylabel("Distance to Goal")
-    plt.ylim(bottom=0.0)
-    plt.show(block=False)
-
-    no_learning_runs[0]["distances"].plot(x="timestep", y="distance")
-    plt.title("Just Replanning Goal Distance Over Time")
-    plt.xlabel("Timestep")
-    plt.ylabel("Distance to Goal")
-    plt.ylim(bottom=0.0)
-    plt.show()
-
+    plot_distances(all_learning_dist_df, all_no_learning_dist_df, block=False)
+    plot_cumulative_error(no_learning_runs, learning_runs)
 
 if __name__ == "__main__":
     run()
