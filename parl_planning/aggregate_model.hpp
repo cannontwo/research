@@ -67,6 +67,47 @@ namespace cannon {
 
           VectorXu get_grid_coords(const VectorXd& query) const;
 
+          /*!
+           * \brief Save the learned portion of this aggregate model to an HDF5 file.
+           *
+           * The structure of the stored data is:
+           *
+           * /coords/i - Coordinates in grid for learned dynamics with index i.
+           * /A_mats/i - Autonomous portion of learned dynamics.
+           * /B_mats/i - Controlled portion of learned dynamics.
+           * /c_vecs/i - Offset portion of learned dynamics.
+           * /num_data/i - Number of data points contributing to learned dynamics.
+           *
+           * \param path The path to save to.
+           */
+          void save(const std::string& path);
+
+          /*!
+           * \brief Load learned portion of aggregate model from an HDF5 file,
+           * overriding whatever is currently in this object.
+           *
+           * The structure of the stored data should be:
+           *
+           * /coords/i - Coordinates in grid for learned dynamics with index i.
+           * /A_mats/i - Autonomous portion of learned dynamics.
+           * /B_mats/i - Controlled portion of learned dynamics.
+           * /c_vecs/i - Offset portion of learned dynamics.
+           * /num_data/i - Number of data points contributing to learned dynamics.
+           *
+           * \param path The path to load. 
+           */
+          void load(const std::string& path);
+
+          /*!
+           * \brief Compute overall Frobenius norm between linearizations of
+           * this model and linearizations of the input environment. 
+           * 
+           * \param env The "true" system to compute error with respect to.
+           *
+           * \returns Total Frobenius norm between linearizations in each cell.
+           */
+          double compute_model_error(std::shared_ptr<Environment> env);
+
         private:
           std::shared_ptr<System> nominal_model_;
 

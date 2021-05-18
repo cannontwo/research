@@ -1,5 +1,11 @@
 #include <cannon/research/parl_planning/aggregate_model.hpp>
 
+#include <queue>
+
+#include <thirdparty/HighFive/include/highfive/H5Easy.hpp>
+
+#include <cannon/math/lattice_points.hpp>
+
 using namespace cannon::research::parl;
 
 void AggregateModel::operator()(const VectorXd& s, VectorXd& dsdt, const double t) {
@@ -203,6 +209,113 @@ LinearParams AggregateModel::get_local_model_for_state(const VectorXd& state) {
     // this case we just return zero dynamics
     return LinearParams(state_dim_, action_dim_);
   }
+}
+
+void AggregateModel::save(const std::string& path) {
+  H5Easy::File file(path, H5Easy::File::Overwrite);
+  std::string coord_path("/coord/");
+  std::string A_path("/A_mats/");
+  std::string B_path("/B_mats/");
+  std::string c_path("/c_vecs/");
+  std::string num_path("/num_data/");
+
+  log_info("Saving AggregateModel with", parameters_.size(), "regions");
+
+  int i = 0;
+  for (auto const& [key, val] : parameters_) {
+    H5Easy::dump(file, coord_path + std::to_string(i), key);
+    H5Easy::dump(file, A_path + std::to_string(i), val.A_);
+    H5Easy::dump(file, B_path + std::to_string(i), val.B_);
+    H5Easy::dump(file, c_path + std::to_string(i), val.c_);
+    H5Easy::dump(file, num_path + std::to_string(i), val.num_data_);
+
+    i++;
+  }
+
+  file.flush();
+}
+
+void AggregateModel::load(const std::string& path) {
+  parameters_.clear();
+
+  H5Easy::File file(path, H5Easy::File::ReadOnly);
+
+  auto coord_group = file.getGroup("/coords");
+  auto A_group = file.getGroup("/A_mats");
+  auto B_group = file.getGroup("/B_mats");
+  auto c_group = file.getGroup("/c_vecs");
+  log_info("/coords group has", coord_group.getNumberObjects(), "objects");
+
+  assert(coord_group.getNumberObjects() == A_group.getNumberObjects());
+  assert(coord_group.getNumberObjects() == B_group.getNumberObjects());
+  assert(coord_group.getNumberObjects() == c_group.getNumberObjects());
+
+  std::string coord_path("/coords/");
+  std::string A_path("/A_mats/");
+  std::string B_path("/B_mats/");
+  std::string c_path("/c_vecs/");
+  std::string num_path("/num_data/");
+
+  for (unsigned int i = 0; i < coord_group.getNumberObjects(); i++) {
+    VectorXu coord = H5Easy::load<VectorXu>(file, coord_path + std::to_string(i));
+
+    // Read autonomous dynamics for region i
+    MatrixXd A = H5Easy::load<MatrixXd>(file, A_path + std::to_string(i));
+    MatrixXd B = H5Easy::load<MatrixXd>(file, B_path + std::to_string(i));
+    VectorXd c = H5Easy::load<VectorXd>(file, c_path + std::to_string(i));
+    int num_data = H5Easy::load<int>(file, num_path + std::to_string(i));
+
+    LinearParams params(A, B, c, num_data);
+
+    parameters_.insert({coord, params});
+  }
+}
+
+double AggregateModel::compute_model_error(std::shared_ptr<Environment> env) {
+  double overall_error = 0.0;
+  double overall_predict_error = 0.0;
+
+  VectorXu grid_sizes = VectorXu::Ones(state_dim_) * grid_size_;
+
+  // Compute all grid indices
+  auto cells = make_lattice_points(grid_sizes);
+
+  for (auto& current_coords : cells) {
+    VectorXd double_coords = VectorXd::Zero(state_dim_);
+    for (int i = 0; i < state_dim_; i++)
+      double_coords[i] = current_coords[i];
+
+    // Compute center of cell
+    VectorXd current_point = (double_coords.array() * cell_extent_.array()).matrix() + bounds_.col(0);
+    current_point += cell_extent_ / 2.0;
+
+    // Compute linearization error at current_point
+    MatrixXd agg_A, agg_B, true_A, true_B;
+    VectorXd agg_c, true_c;
+    std::tie(agg_A, agg_B, agg_c) = get_linearization(current_point);
+    std::tie(true_A, true_B, true_c) = env->get_ode_sys()->get_linearization(current_point);
+
+    overall_error += (agg_A - true_A).norm();
+    overall_error += (agg_B - true_B).norm();
+    overall_error += (agg_c - true_c).norm();
+
+    // TODO Clean up a bit, return for writing to file
+    VectorXd current = VectorXd::Zero(state_dim_ + action_dim_);
+    current.head(state_dim_) = current_point;
+    VectorXd env_next = VectorXd::Zero(state_dim_ + action_dim_),
+             model_next = VectorXd::Zero(state_dim_ + action_dim_);
+
+    (*env->get_ode_sys())(current, env_next, 0);
+    (*this)(current, model_next, 0);
+
+    overall_predict_error += (env_next - model_next).norm();
+  }
+
+  log_info("Total aggregate model linearization error was", overall_error,
+           "over", cells.size(), "regions");
+  log_info("Total aggregate model prediction error was", overall_predict_error);
+
+  return overall_error;
 }
 
 // Free Functions

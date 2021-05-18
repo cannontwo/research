@@ -274,7 +274,7 @@ void run_exp(ExperimentWriter &w, int seed) {
   auto env = std::make_shared<KinematicCarEnvironment>();
 
   // Planning for a different length of car
-  auto nominal_sys = std::make_shared<KinCarSystem>(1.0);
+  auto nominal_sys = std::make_shared<KinCarSystem>(0.5);
 
   Vector3d start = Vector3d::Zero();
   Vector3d goal;
@@ -293,6 +293,9 @@ void run_exp(ExperimentWriter &w, int seed) {
 
   w.start_log("distances");
   w.write_line("distances", "timestep,distance");
+
+  w.start_log("learned_model_error");
+  w.write_line("learned_model_error", "timestep,error");
 
   // TODO Record closest approach to goal at each timestep up to max number of
   // timesteps
@@ -330,7 +333,16 @@ void run_exp(ExperimentWriter &w, int seed) {
     // following this path.
     if (learn)
       planning_sys->process_path_parl(env, parl, path);
+
+    // Compute and write AggregateModel overall linearization error
+    double error = planning_sys->compute_model_error(env);
+    w.write_line("learned_model_error", std::to_string(overall_timestep) + "," +
+                                            std::to_string(error));
+
+    // TODO Compute prediction error as well?
   }
+
+  planning_sys->save(w.get_dir() + "/aggregate_model.h5");
 
   if ((env->get_state() - goal).norm() < 0.1)
     log_info("Made it to goal!");
@@ -338,8 +350,13 @@ void run_exp(ExperimentWriter &w, int seed) {
     log_info("Maximum timesteps exceeded");
 }
 
-int main() {
+int main(int argc, char **argv) {
   std::string log_path;
+
+  if (argc > 1) {
+    if (argv[1][0] == '1')
+      learn = true;
+  }
 
   if (learn) {
     log_path = std::string("logs/parl_planning_exps/learning/");
