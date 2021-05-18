@@ -22,7 +22,7 @@ static Vector2d s_goal = Vector2d::Ones();
 static int overall_timestep = 0;
 
 // Whether to do learning
-static bool learn = true;
+static bool learn = false;
 
 Vector4d compute_error_state(const Vector3d &ref, const Vector3d &actual,
                              double time) {
@@ -274,7 +274,7 @@ void run_exp(ExperimentWriter &w, int seed) {
   auto env = std::make_shared<KinematicCarEnvironment>();
 
   // Planning for a different length of car
-  auto nominal_sys = std::make_shared<KinCarSystem>(0.1);
+  auto nominal_sys = std::make_shared<KinCarSystem>(1.0);
 
   Vector3d start = Vector3d::Zero();
   Vector3d goal;

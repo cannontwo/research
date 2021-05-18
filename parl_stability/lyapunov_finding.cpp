@@ -1,6 +1,9 @@
 #include <cannon/research/parl_stability/lyapunov_finding.hpp>
 
+#include <cannon/ml/optimization_result.hpp>
+
 using namespace cannon::research::parl;
+using namespace cannon::ml;
 
 std::tuple<std::vector<LyapunovComponent>, double, double, double>
 cannon::research::parl::attempt_lp_solve(const PWAFunc& pwa, const
