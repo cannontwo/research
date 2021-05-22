@@ -15,6 +15,8 @@
 #ifdef CANNON_BUILD_GRAPHICS
   #include <cannon/graphics/deferred_renderer.hpp>
   #include <cannon/graphics/geometry/model.hpp>
+  #include <cannon/graphics/viewer_3d.hpp>
+  #include <cannon/graphics/window.hpp>
   using namespace cannon::graphics;
 #endif
 
@@ -162,70 +164,70 @@ namespace cannon {
                 // Load pendulum geometry and add to viewer
                 DeferredRenderer renderer;
 
-                auto car_model = renderer.viewer.spawn_model("assets/car/lowpoly_car_revised.obj");
+                auto car_model = renderer.viewer->spawn_model("assets/car/lowpoly_car_revised.obj");
                 car_model->set_pos({0.0, 0.0, 0.0});
                 car_model->set_scale(0.01);
 
-                auto goal_sphere_model = renderer.viewer.spawn_model("assets/sphere/sphere.obj");
+                auto goal_sphere_model = renderer.viewer->spawn_model("assets/sphere/sphere.obj");
                 float goal_x = goal_[0];
                 float goal_y = goal_[1];
                 goal_sphere_model->set_pos({goal_x, 0.0, goal_y});
                 goal_sphere_model->set_scale(0.05);
 
                 // Wall geometry
-                auto north_wall = renderer.viewer.spawn_plane();
+                auto north_wall = renderer.viewer->spawn_plane();
                 north_wall->set_pos({0.0, 0.0, 2.0});
                 AngleAxisf north_rot(M_PI, Vector3f::UnitY());
                 north_wall->set_rot(north_rot);
                 north_wall->set_scale(5.0);
 
-                auto south_wall = renderer.viewer.spawn_plane();
+                auto south_wall = renderer.viewer->spawn_plane();
                 south_wall->set_pos({0.0, 0.0, -2.0});
                 AngleAxisf south_rot(0, Vector3f::UnitY());
                 south_wall->set_rot(south_rot);
                 south_wall->set_scale(5.0);
 
-                auto east_wall = renderer.viewer.spawn_plane();
+                auto east_wall = renderer.viewer->spawn_plane();
                 east_wall->set_pos({2.0, 0.0, 0.0});
                 AngleAxisf east_rot(-M_PI / 2, Vector3f::UnitY());
                 east_wall->set_rot(east_rot);
                 east_wall->set_scale(5.0);
 
-                auto west_wall = renderer.viewer.spawn_plane();
+                auto west_wall = renderer.viewer->spawn_plane();
                 west_wall->set_pos({-2.0, 0.0, 0.0});
                 AngleAxisf west_rot(M_PI / 2, Vector3f::UnitY());
                 west_wall->set_rot(west_rot);
                 west_wall->set_scale(5.0);
 
-                auto north_back_wall = renderer.viewer.spawn_plane();
+                auto north_back_wall = renderer.viewer->spawn_plane();
                 north_back_wall->set_pos({0.0, 0.0, 2.0});
                 AngleAxisf north_back_rot(0.0, Vector3f::UnitY());
                 north_back_wall->set_rot(north_back_rot);
                 north_back_wall->set_scale(5.0);
 
-                auto south_back_wall = renderer.viewer.spawn_plane();
+                auto south_back_wall = renderer.viewer->spawn_plane();
                 south_back_wall->set_pos({0.0, 0.0, -2.0});
                 AngleAxisf south_back_rot(M_PI, Vector3f::UnitY());
                 south_back_wall->set_rot(south_back_rot);
                 south_back_wall->set_scale(5.0);
 
-                auto east_back_wall = renderer.viewer.spawn_plane();
+                auto east_back_wall = renderer.viewer->spawn_plane();
                 east_back_wall->set_pos({2.0, 0.0, 0.0});
                 AngleAxisf east_back_rot(M_PI / 2, Vector3f::UnitY());
                 east_back_wall->set_rot(east_back_rot);
                 east_back_wall->set_scale(5.0);
 
-                auto west_back_wall = renderer.viewer.spawn_plane();
+                auto west_back_wall = renderer.viewer->spawn_plane();
                 west_back_wall->set_pos({-2.0, 0.0, 0.0});
                 AngleAxisf west_back_rot(-M_PI / 2, Vector3f::UnitY());
                 west_back_wall->set_rot(west_back_rot);
                 west_back_wall->set_scale(5.0);
 
                 // Set camera position
-                renderer.viewer.c.set_pos({-3.0, 7.0, -3.0});
-                Vector3f dir = renderer.viewer.c.get_pos() - Vector3f::Zero();
+                renderer.viewer->c.set_pos({-3.0, 7.0, -3.0});
+                Vector3f dir = renderer.viewer->c.get_pos() - Vector3f::Zero();
                 dir.normalize();
-                renderer.viewer.c.set_direction(dir);
+                renderer.viewer->c.set_direction(dir);
 
                 renderer.render_loop([&] {
                     static CircularBuffer reward_cbuf;

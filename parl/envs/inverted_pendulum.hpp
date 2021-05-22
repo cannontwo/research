@@ -18,6 +18,8 @@
 #ifdef CANNON_BUILD_GRAPHICS
   #include <cannon/graphics/deferred_renderer.hpp>
   #include <cannon/graphics/geometry/model.hpp>
+  #include <cannon/graphics/viewer_3d.hpp>
+  #include <cannon/graphics/window.hpp>
   using namespace cannon::graphics;
 #endif
 
@@ -124,7 +126,7 @@ namespace cannon {
             render_thread_ = std::thread([&](){
                 // Load pendulum geometry and add to viewer
                 DeferredRenderer renderer;
-                auto pend_model = renderer.viewer.spawn_model("assets/inverted_pendulum/inverted_pendulum.obj");
+                auto pend_model = renderer.viewer->spawn_model("assets/inverted_pendulum/inverted_pendulum.obj");
                 pend_model->set_pos({0.0, 0.0, 0.0});
                 pend_model->set_scale(0.1);
 

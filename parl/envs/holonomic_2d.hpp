@@ -13,6 +13,8 @@
 
 #ifdef CANNON_BUILD_GRAPHICS
   #include <cannon/graphics/deferred_renderer.hpp>
+  #include <cannon/graphics/viewer_3d.hpp>
+  #include <cannon/graphics/window.hpp>
   #include <cannon/graphics/geometry/model.hpp>
   using namespace cannon::graphics;
 #endif
@@ -128,12 +130,12 @@ namespace cannon {
                 DeferredRenderer renderer;
 
                 // TODO Make actual car model
-                auto car_model = renderer.viewer.spawn_model("assets/car/car.obj");
+                auto car_model = renderer.viewer->spawn_model("assets/car/car.obj");
                 car_model->set_pos({0.0, 0.0, 0.0});
                 car_model->set_scale(0.1);
 
                 // TODO Spawn geometry representing start and goal
-                auto goal_sphere_model = renderer.viewer.spawn_model("assets/sphere/sphere.obj");
+                auto goal_sphere_model = renderer.viewer->spawn_model("assets/sphere/sphere.obj");
                 float goal_x = goal_[0];
                 float goal_y = goal_[1];
                 goal_sphere_model->set_pos({goal_x, 0.0, goal_y});
