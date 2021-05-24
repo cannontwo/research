@@ -4,6 +4,7 @@
 #include <ompl/control/SimpleSetup.h>
 #include <ompl/control/SpaceInformation.h>
 #include <ompl/control/planners/sst/SST.h>
+#include <ompl/control/planners/rrt/RRT.h>
 #include <ompl/util/RandomNumbers.h>
 
 #include <cannon/physics/systems/kinematic_car.hpp>
@@ -22,7 +23,7 @@ static Vector2d s_goal = Vector2d::Ones();
 static int overall_timestep = 0;
 
 // Whether to do learning
-static bool learn = false;
+static bool learn = true;
 
 Vector4d compute_error_state(const Vector3d &ref, const Vector3d &actual,
                              double time) {
@@ -221,27 +222,42 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
   si->setStatePropagator(oc::ODESolver::getStatePropagator(
       odeSolver, KinCarSystem::ompl_post_integration));
 
-  ss.setStartAndGoalStates(start, goal, 0.05);
+  ss.setStartAndGoalStates(start, goal, 0.1);
 
   // Necessary for discrete-time model
   ss.getSpaceInformation()->setPropagationStepSize(env->get_time_step());
   log_info("Propagation step size is",
            ss.getSpaceInformation()->getPropagationStepSize());
 
-  auto planner = std::make_shared<oc::SST>(ss.getSpaceInformation());
+  //auto planner = std::make_shared<oc::SST>(ss.getSpaceInformation());
+  auto planner = std::make_shared<oc::RRT>(ss.getSpaceInformation());
   ss.setPlanner(planner);
 
   ss.setup();
 
-  ob::PlannerStatus solved = ss.solve(1.0);
-  if (solved) {
-    std::cout << "Found solution:" << std::endl;
-    ss.getSolutionPath().printAsMatrix(std::cout);
+  double plan_time = 1.0;
+  bool have_plan = false;
 
-    return ss.getSolutionPath();
-  } else {
-    return oc::PathControl(si);
+  while (!have_plan && plan_time < 30.0) {
+
+    log_info("Planning for", plan_time, "seconds");
+    ob::PlannerStatus solved = ss.solve(plan_time);
+    if (solved) {
+      if (ss.haveExactSolutionPath()) {
+        std::cout << "Found solution:" << std::endl;
+        ss.getSolutionPath().printAsMatrix(std::cout);
+
+        return ss.getSolutionPath();
+      } else {
+        plan_time *= 2.0;
+      }
+    } else {
+      plan_time *= 2.0;
+    }
   }
+
+  // If we get here, planning has failed 
+  return oc::PathControl(si);
 }
 
 std::shared_ptr<ob::StateSpace>
@@ -274,7 +290,7 @@ void run_exp(ExperimentWriter &w, int seed) {
   auto env = std::make_shared<KinematicCarEnvironment>();
 
   // Planning for a different length of car
-  auto nominal_sys = std::make_shared<KinCarSystem>(0.5);
+  auto nominal_sys = std::make_shared<KinCarSystem>(0.1);
 
   Vector3d start = Vector3d::Zero();
   Vector3d goal;

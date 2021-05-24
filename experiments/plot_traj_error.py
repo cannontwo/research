@@ -47,9 +47,9 @@ def read_data(no_learning_folder, learning_folder):
 def plot_distances(all_learning_df, all_no_learning_df, block=True):
     plt.figure()
     sns.lineplot(x='timestep', y='distance',
-            data=all_learning_df.reset_index(), label="PARL+Planning")
-    sns.lineplot(x='timestep', y='distance',
             data=all_no_learning_df.reset_index(), label="Just Replanning")
+    sns.lineplot(x='timestep', y='distance',
+            data=all_learning_df.reset_index(), label="PARL+Planning")
 
     plt.title("Distance to Goal Over Time")
     plt.xlabel("Timestep")
@@ -74,8 +74,8 @@ def make_traj_error_norm_df(run_dict):
 
 def plot_cumulative_error(no_learning_runs, learning_runs, block=True):
     plt.figure()
-    all_no_learning_error_norms = pd.concat([make_traj_error_norm_df(r).cumsum() for r in no_learning_runs])
-    all_learning_error_norms = pd.concat([make_traj_error_norm_df(r).cumsum() for r in learning_runs])
+    all_no_learning_error_norms = pd.concat([make_traj_error_norm_df(r).cumsum() for r in no_learning_runs if len(r["planned"]) > 0])
+    all_learning_error_norms = pd.concat([make_traj_error_norm_df(r).cumsum() for r in learning_runs if len(r["planned"]) > 0])
     sns.lineplot(data=all_no_learning_error_norms, label="Just Replanning")
     sns.lineplot(data=all_learning_error_norms, label="PARL+Planning")
 
