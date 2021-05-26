@@ -9,7 +9,7 @@
 #include <ompl/control/spaces/RealVectorControlSpace.h>
 
 #include <cannon/research/parl/environment.hpp>
-#include <cannon/physics/systems/kinematic_car.hpp>
+#include <cannon/physics/systems/control_affine_kinematic_car.hpp>
 #include <cannon/utils/blocking_queue.hpp>
 
 #ifdef CANNON_BUILD_GRAPHICS
@@ -27,18 +27,31 @@ namespace cannon {
   namespace research {
     namespace parl {
 
-      class KinematicCarEnvironment : public Environment {
+      class ControlAffineKinematicCarEnvironment : public Environment {
         public:
 
-          KinematicCarEnvironment(const Vector3d& s = Vector3d::Zero(), const
-              Vector3d& g = Vector3d::Ones()) : kc_(s, g), state_(3), start_(s), goal_(g)
+          ControlAffineKinematicCarEnvironment(const VectorXd& s = VectorXd::Zero(4), const
+              VectorXd& g = VectorXd::Ones(4)) : kc_(s, g), state_(4), start_(s), goal_(g)
           {
-            state_space_ = std::make_shared<ob::SE2StateSpace>();
+            auto se2_part = std::make_shared<ob::SE2StateSpace>();
             ob::RealVectorBounds sb(2);
             sb.setLow(-2.0);
             sb.setHigh(2.0);
-            state_space_->setBounds(sb);
+            se2_part->setBounds(sb);
+            se2_part->setup();
+
+            auto v_part = std::make_shared<ob::RealVectorStateSpace>(1);
+            ob::RealVectorBounds vb(1);
+            vb.setLow(-1.0);
+            vb.setHigh(1.0);
+            v_part->setBounds(vb);
+            v_part->setup();
+
+            state_space_ = std::make_shared<ob::CompoundStateSpace>();
+            state_space_->addSubspace(se2_part, 1.0);
+            state_space_->addSubspace(v_part, 1.0);
             state_space_->setup();
+
 
             action_space_ = std::make_shared<oc::RealVectorControlSpace>(state_space_, 2);
             ob::RealVectorBounds ab(2);
@@ -61,7 +74,7 @@ namespace cannon {
           }
 
           virtual std::shared_ptr<System> get_ode_sys() const override {
-            return std::make_shared<KinCarSystem>(kc_.s_);
+            return std::make_shared<CAKinCarSystem>(kc_.s_);
           }
 
           virtual VectorXd get_state() const override {
@@ -69,14 +82,14 @@ namespace cannon {
           }
           
           virtual MatrixXd sample_grid_refs(int rows, int cols) const override {
-            MatrixXd refs(3, rows * cols);
+            MatrixXd refs(4, rows * cols);
 
             VectorXd xs = VectorXd::LinSpaced(cols,
-                state_space_->getBounds().low[0],
-                state_space_->getBounds().high[0]);
+                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().low[0],
+                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().high[0]);
             VectorXd ys = VectorXd::LinSpaced(rows,
-                state_space_->getBounds().low[1],
-                state_space_->getBounds().high[1]);
+                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().low[1],
+                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().high[1]);
 
             for (int i = 0; i < rows; i++) {
               for (int j = 0; j < cols; j++) {
@@ -84,6 +97,7 @@ namespace cannon {
                 refs(0, idx) = xs[j];
                 refs(1, idx) = ys[i];
                 refs(2, idx) = 0.0;
+                refs(3, idx) = 0.0;
               }
             }
 
@@ -102,6 +116,7 @@ namespace cannon {
             state_[0] = std::max(-2.0, std::min(2.0, state_[0]));
             state_[1] = std::max(-2.0, std::min(2.0, state_[1]));
             state_[2] = std::atan2(std::sin(state_[2]), std::cos(state_[2]));
+            state_[3] = std::max(-1.0, std::min(1.0, state_[3]));
 
             return std::make_tuple(state_, reward, false);
           }
@@ -129,7 +144,7 @@ namespace cannon {
           }
 
           VectorXd reset(const VectorXd& s) {
-            assert(s.size() == 3);
+            assert(s.size() == 4);
             state_ = kc_.reset(s);
             return state_;
           }
@@ -138,25 +153,27 @@ namespace cannon {
             reward_queue_.push(ep_reward);
           }
 
-          double get_time_step() {
+          virtual double get_time_step() override {
             return kc_.time_step;
           }
 
           // TODO Generalize to interface?
           MatrixX2d get_state_space_bounds() {
-            MatrixX2d ret_bounds = MatrixX2d::Zero(3, 2);
-            auto ss_bounds = state_space_->getBounds();
+            MatrixX2d ret_bounds = MatrixX2d::Zero(4, 2);
+            auto ss_bounds = state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds();
+            auto v_bounds = state_space_->getSubspace(1)->as<ob::RealVectorStateSpace>()->getBounds();
 
             ret_bounds(0, 0) = ss_bounds.low[0];
             ret_bounds(0, 1) = ss_bounds.high[0];
             ret_bounds(1, 0) = ss_bounds.low[1];
             ret_bounds(1, 1) = ss_bounds.high[1];
-            ret_bounds(2, 0) = -M_PI;
-            ret_bounds(2, 1) = M_PI;
+            ret_bounds(2, 0) = v_bounds.low[0];
+            ret_bounds(2, 1) = v_bounds.high[0];
+            ret_bounds(3, 0) = -M_PI;
+            ret_bounds(3, 1) = M_PI;
 
             return ret_bounds;
           }
-
 
         private:
 #ifdef CANNON_BUILD_GRAPHICS
@@ -264,14 +281,14 @@ namespace cannon {
           }
 #endif
 
-          std::shared_ptr<ob::SE2StateSpace> state_space_;
+          std::shared_ptr<ob::CompoundStateSpace> state_space_;
           std::shared_ptr<oc::RealVectorControlSpace> action_space_;
 
-          systems::KinematicCar kc_;
+          systems::ControlAffineKinematicCar kc_;
 
           VectorXd state_;
-          Vector3d start_;
-          Vector3d goal_;
+          VectorXd start_;
+          VectorXd goal_;
 
           bool rendering_initialized_ = false;
 

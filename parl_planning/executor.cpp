@@ -1,116 +1,206 @@
 #include <cannon/research/parl_planning/executor.hpp>
 
+#include <cassert>
+
+#include <cannon/research/parl/parl.hpp>
+#include <cannon/research/parl_planning/ompl_utils.hpp>
+#include <cannon/utils/experiment_writer.hpp>
+
 using namespace cannon::research::parl;
+using namespace cannon::utils;
 
-void Executor::execute(post_int_func ompl_post_integration) {
-  // TODO This is the main function
-  
-  while ((env_->get_state() - goal_).norm() > 0.1) {
-    VectorXd start = env_->get_state();
-    // copy start and goal to OMPL ScopedState for use with planner
-    ob::ScopedState<> ompl_start(env_->get_state_space());
-    ob::ScopedState<> ompl_goal(env_->get_state_space());
 
-    for (unsigned int i = 0; i < start.size(); i++) {
-      ompl_start[i] = start[i];
-      ompl_goal[i] = goal_[i];
-    }
-
-    auto path = planner_->plan_to_goal(env_, ompl_post_integration, ompl_start, ompl_goal);
-
-    // TODO Do we want to adjust bounds on action space?
-    Hyperparams params;
-    params.load_config("/home/cannon/Documents/cannon/cannon/research/experiments/parl_configs/r10c10_kc.yaml"); 
-    Parl parl(make_error_state_space(env_, path.length()), env_->get_action_space(),
-        make_error_system_refs(path, start.size()), params);
-
-    execute_path(path);
-
-    // TODO Update model used by planner to incorporate learned dynamics
-    // This could just be a decorator on the original model that looks up the
-    // learned PARL model for a particular region, but the learned PARL model
-    // needs to be processed after the path is executed.
-  }
-}
-
-void Executor::execute_path(oc::PathControl& path) {
-  std::vector<ob::State*> states = path.getStates();
-  std::vector<oc::Control*> controls = path.getControls();
+void Executor::execute_path( oc::PathControl &path, std::shared_ptr<Parl> parl,
+    ExperimentWriter &w) {
+  std::vector<ob::State *> states = path.getStates();
+  std::vector<oc::Control *> controls = path.getControls();
   std::vector<double> durations = path.getControlDurations();
   assert(durations.size() == controls.size());
 
   double accumulated_dur = 0.0;
   for (unsigned int i = 0; i < controls.size(); i++) {
     VectorXd s = get_coords_from_ompl_state(env_, states[i]);
-    VectorXd next_s = get_coords_from_ompl_state(env_, states[i+1]);
+    VectorXd next_s = s;
 
-    // Break path tracking if state error greater than threshold
+    if (i < controls.size() - 1)
+      next_s = get_coords_from_ompl_state(env_, states[i+1]);
+
+    // Break path tracking if state error greater than threshold. This is a
+    // check at each waypoint.
     double path_error = (s - env_->get_state()).norm();
     log_info("At step", i, "xy path error is", path_error);
     if (path_error > tracking_threshold_) {
       // TODO This implicitly assumes that there is no autonomous dynamical
       // behavior; instead, a stopping maneuver should be executed before
       // replanning (or, under different assumptions, replanning should be done
-      // for the predicted state after planning time). Ties into ICS discussion.
-      
+      // for the predicted state after planning time).
+
       log_info("Replanning because tracking threshold exceeded");
       return;
     }
 
     Vector2d c = get_control_from_ompl_control(env_, controls[i]);
 
-    unsigned int duration_millis = std::floor(durations[i] * 1000);
-    std::chrono::milliseconds control_dur(duration_millis);
-    
-    execute_control_for_duration(s, next_s, c, accumulated_dur, control_dur);
+
+    // log_info("Executing control", c, "for", control_dur.count(),
+    // "milliseconds");
+
+    execute_control_for_duration(parl, s, next_s, c, accumulated_dur,
+                                 durations[i], w);
     accumulated_dur += durations[i];
   }
 
-  log_info("Goal error on real system is", (env_->get_state() - goal_).norm());
-  
+  log_info("Goal error on real system is",
+           (env_->get_state() - goal_).norm());
 }
 
-void Executor::execute_control_for_duration(const VectorXd& s, const VectorXd& next_s, 
-    const VectorXd& c, double start_time, std::chrono::milliseconds control_dur) {
+void Executor::execute_control_for_duration(ParlPtr parl, const VectorXd &s,
+    const VectorXd &next_s, const VectorXd &c, double start_time,
+    double control_dur, ExperimentWriter &w) {
 
-  assert(s.size() == next_s.size());
   assert(s.size() == env_->get_state_space()->getDimension());
-  assert(c.size() == env_->get_action_space()->getDimension());
+  assert(next_s.size() == env_->get_state_space()->getDimension());
 
-  auto start = std::chrono::steady_clock::now();
-  std::chrono::milliseconds cur_dur;
-
-  VectorXd error_state = compute_error_state(s, env_->get_state(), 0.0);
-
-  VectorXd new_state;
-  double reward;
-  bool done;
+  double cur_dur = 0.0;
+  double total_seg_reward = 0.0;
   do {
-    VectorXd parl_c = planner_->parl_->get_action(error_state);
+    // Compute interpolated reference and error state
+    VectorXd old_interp_ref, error_state;
+    std::tie(old_interp_ref, error_state) = compute_interpolated_error_state_(
+        cur_dur / control_dur, s, next_s, start_time + cur_dur);
 
-    std::tie(new_state, reward, done) = env_->step(c + parl_c);
-    env_->render();
+    // Compute PARL control for error state
+    VectorXd parl_c = VectorXd::Zero(env_->get_action_space()->getDimension());
+    if (learn_) {
+      parl_c = parl->get_action(error_state);
+    }
+
+    // Step the environment
+    VectorXd new_state = execute_timestep(parl_c + c, w);
 
     // TODO Check for ICS? Or somehow else execute emergency stopping maneuver?
 
-    // Compute error coordinates for new_state
-    double t = (float)cur_dur.count() / (float)control_dur.count();
+    write_distances_line_(w, next_s);
 
-    // TODO Linear interpolation between reference states may not be the best
-    // way to do this for strongly nonlinear systems.
-    VectorXd interp_ref = ((1.0 - t) * s) + (t * next_s);
-    double time = ((double)cur_dur.count() / 1000.0) + start_time;
-    VectorXd new_error_state = compute_error_state(interp_ref, new_state, time);
+    // Compute error coordinates for new_state
+    VectorXd interp_ref, new_error_state;
+    std::tie(interp_ref, new_error_state) = compute_interpolated_error_state_(
+        (cur_dur + env_->get_time_step()) / control_dur, s, next_s,
+        cur_dur + start_time + env_->get_time_step());
+
+    write_planned_traj_line_(w, interp_ref, c);
+
+    // Compute trajectory following reward
+    // TODO Frechet distance?
+    double reward = -(interp_ref - new_state).norm();
 
     // Train PARL using error states
-    planner_->parl_->process_datum(error_state, parl_c, reward, new_error_state, done);
+    if (learn_) {
+      parl->process_datum(error_state, parl_c, reward, new_error_state, false);
 
-    error_state = new_error_state;
+      // TODO Is this the correct way to do controller updates? Do we want to
+      // cache learned PARL controllers as well?
+      parl->value_grad_update_controller(error_state);
+    }
 
-    cur_dur = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - start);
+    total_seg_reward += reward;
+
+    cur_dur += env_->get_time_step();
+    overall_timestep_++;
+
   } while (control_dur > cur_dur);
 
+  // Plotting reward for an entire control segment
+  if (render_)
+    env_->register_ep_reward(total_seg_reward);
+}
+
+VectorXd Executor::execute_timestep(const VectorXd &c, ExperimentWriter &w) {
+  write_executed_traj_line_(w, c);
+
+  double env_reward;
+  bool done;
+  VectorXd new_state;
+  std::tie(new_state, env_reward, done) = env_->step(c);
+  if (render_)
+    env_->render();
+
+  return new_state;
+}
+
+int Executor::get_overall_timestep() {
+  return overall_timestep_;
+}
+
+VectorXd Executor::compute_error_state_(const VectorXd &ref, const VectorXd
+    &actual, double time) {
+  unsigned int state_dim = env_->get_state_space()->getDimension();
+
+  assert(ref.size() == state_dim);
+  assert(actual.size() == state_dim);
+
+  VectorXd diff = ref - actual;
+  VectorXd ret = VectorXd::Zero(state_dim + 1);
+  ret.head(state_dim) = diff;
+  ret[state_dim] = time;
+
+  return ret;
+}
+
+std::pair<VectorXd, VectorXd> Executor::compute_interpolated_error_state_(
+    double t, const VectorXd &s, const VectorXd &next_s, double time) {
+  assert(0.0 <= t);
+  assert(t <= 1.0);
+
+  VectorXd interp_ref = ((1.0 - t) * s) + (t * next_s);
+  VectorXd error_state = compute_error_state_(interp_ref, env_->get_state(), time);
+
+  return std::make_pair(interp_ref, error_state);
+}
+
+void Executor::write_executed_traj_line_(ExperimentWriter &w, const VectorXd& c) {
+  assert(c.size() == env_->get_action_space()->getDimension());
+
+  std::stringstream ss;
+  ss << overall_timestep_ << ",";
+
+  auto s = env_->get_state();
+  for (unsigned int i = 0; i < env_->get_state_space()->getDimension(); i++) {
+    ss << s[i] << ",";
+  }
+
+  for (unsigned int i = 0; i < c.size(); i++)  {
+    ss << c[i] << ",";
+  }
+
+  w.write_line("executed_traj", ss.str());
+}
+
+void Executor::write_planned_traj_line_(ExperimentWriter &w, const VectorXd&
+    interp_ref, const VectorXd& c) {
+  assert(s.size() == env_->get_state_space()->getDimension());
+  assert(c.size() == env_->get_action_space()->getDimension());
+
+  std::stringstream ss;
+  ss << overall_timestep_ << ",";
+
+  for (unsigned int i = 0; i < interp_ref.size(); i++) {
+    ss << interp_ref[i] << ",";
+  }
+
+  for (unsigned int i = 0; i < c.size(); i++)  {
+    ss << c[i] << ",";
+  }
+
+  w.write_line("planned_traj", ss.str());
+}
+
+void Executor::write_distances_line_(ExperimentWriter &w, const VectorXd& s) {
+  assert(s.size() == env_->get_state_space()->getDimension());
+
+  std::stringstream ss;
+  ss << overall_timestep_ << "," << (s - goal_).norm();
+  w.write_line("distances", ss.str());
 }
 
 // Free Functions

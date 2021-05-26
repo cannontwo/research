@@ -60,6 +60,8 @@ namespace cannon {
 
           virtual ~Environment() {};
 
+          virtual double get_time_step() = 0;
+
       };
 
     } // namespace parl

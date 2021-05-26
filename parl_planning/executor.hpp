@@ -1,16 +1,24 @@
 #ifndef CANNON_RESEARCH_PARL_PLANNING_EXECUTOR_H
 #define CANNON_RESEARCH_PARL_PLANNING_EXECUTOR_H 
 
+#include <chrono>
+
 #include <ompl/config.h>
 #include <ompl/control/PathControl.h>
 
 #include <cannon/research/parl/environment.hpp>
-#include <cannon/research/parl_planning/parl_planner.hpp>
-#include <cannon/research/parl_planning/ompl_utils.hpp>
+#include <cannon/utils/class_forward.hpp>
 
 namespace cannon {
+
+  namespace utils {
+    CANNON_CLASS_FORWARD(ExperimentWriter);
+  }
+
   namespace research {
     namespace parl {
+
+      CANNON_CLASS_FORWARD(Parl);
 
       void noop_post_integration(const ob::State*, const oc::Control*, const double, ob::State*); 
 
@@ -18,25 +26,111 @@ namespace cannon {
         public:
           Executor() = delete;
 
-          Executor(std::shared_ptr<Environment> env,
-              std::shared_ptr<ParlPlanner> planner, const VectorXd& goal,
-              double tracking_threshold=0.5) :
-            tracking_threshold_(tracking_threshold), env_(env),
-            planner_(planner), goal_(goal) {
-              assert(goal_.size() == env_->get_state_space()->getDimension());
-            }
+          Executor(std::shared_ptr<Environment> env, const VectorXd &goal,
+                   double tracking_threshold = 0.5, bool learn = false,
+                   bool render = false)
+              : tracking_threshold_(tracking_threshold), env_(env), goal_(goal),
+                overall_timestep_(0), learn_(learn), render_(render) {
+            assert(goal_.size() == env_->get_state_space()->getDimension());
+          }
 
-          void execute(post_int_func ompl_post_integration=noop_post_integration);
-          void execute_path(oc::PathControl& path);
-          void execute_control_for_duration(const VectorXd& s, const VectorXd& next_s, 
-              const VectorXd& c, double start_time,
-              std::chrono::milliseconds control_dur);
+          /*!
+           * \brief Execute a path.
+           *
+           * \param path The path to execute.
+           * \param parl Parl learner to optionally learn around the path
+           * \param w ExperimentWriter for recording execution statistics
+           */
+          void execute_path(oc::PathControl &path, ParlPtr parl,
+                            utils::ExperimentWriter &w);
+
+          /*!
+           * \brief Execute a control in the environment for a given amount of time.
+           * 
+           * \param parl Parl learner responsible for learning from this execution
+           * \param s Previous waypoint
+           * \param next_s Next waypoint
+           * \param c Control to be applied
+           * \param start_time Time in execution of trajectory when control started
+           * \param control_dur Amount of time to execute control
+           * \param w ExperimentWriter for recording statistics
+           */
+          void execute_control_for_duration(ParlPtr parl, const VectorXd &s,
+                                            const VectorXd &next_s,
+                                            const VectorXd &c, double start_time,
+                                            double control_dur,
+                                            utils::ExperimentWriter &w);
+
+          /*!
+           * \brief Execute a single timestep of a control in this environment.
+           *
+           * \param c Control to execute this timestep
+           * \param w ExperimentWriter for recording statistics
+           *
+           * \returns Stepped environment state 
+           */
+          VectorXd execute_timestep(const VectorXd &c, utils::ExperimentWriter &w);
+
+          /*!
+           * \brief Get the number of timesteps executed by this object.
+           *
+           * \returns Overall timestep.
+           */
+          int get_overall_timestep();
 
         private:
-          double tracking_threshold_;
-          std::shared_ptr<Environment> env_;
-          std::shared_ptr<ParlPlanner> planner_;
-          VectorXd goal_;
+
+          /*!
+           * \brief Create an error state representation of the input state
+           * with respect to a reference state.
+           *
+           * \param ref Reference to compute error with respect to.
+           * \param actual Observed environment state.
+           * \param time Execution time, which will be incorporated into error state.
+           *
+           * \returns The error state
+           */
+          VectorXd compute_error_state_(const VectorXd &ref, const VectorXd
+              &actual, double time);
+
+          /*!
+           * \brief Compute interpolated reference point and corresponding
+           * error state for current environment state.
+           *
+           * \param t Interpolation parameter
+           * \param s First waypoint
+           * \param next_s Next waypoint
+           * \param time Execution time
+           *
+           * \returns A pair containing the interpolated reference point and
+           * error state for the current environment state.
+           */
+          std::pair<VectorXd, VectorXd> compute_interpolated_error_state_(
+              double t, const VectorXd &s, const VectorXd &next_s, double time);
+
+          /*!
+           * \brief Write executed trajectory to file.
+           */
+          void write_executed_traj_line_(utils::ExperimentWriter &w, const VectorXd& c);  
+
+          /*!
+           * \brief Write planned trajectory to file.
+           */
+          void write_planned_traj_line_(utils::ExperimentWriter &w, const
+              VectorXd& interp_ref, const VectorXd& c);
+
+          /*!
+           * \brief Write distances to file.
+           */
+          void write_distances_line_(utils::ExperimentWriter &w, const VectorXd& s);
+
+          std::shared_ptr<Environment> env_; //!< Environment to execute controls in
+          double tracking_threshold_; //!< Tracking threshold at which replanning is triggered
+          VectorXd goal_; //!< Goal for plans
+          int overall_timestep_; //!< Total number of timesteps executed in environment
+
+          bool learn_; //!< Whether to execute learning
+          bool render_; //!< Whether to render during execution
         
       };
 

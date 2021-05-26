@@ -122,6 +122,10 @@ namespace cannon {
             reward_queue_.push(ep_reward);
           }
 
+          virtual double get_time_step() override {
+            return 0.01;
+          }
+
         private:
 #ifdef CANNON_BUILD_GRAPHICS
           void start_rendering_thread_() {
