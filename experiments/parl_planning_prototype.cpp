@@ -7,8 +7,8 @@
 #include <ompl/control/planners/rrt/RRT.h>
 #include <ompl/util/RandomNumbers.h>
 
-#include <cannon/physics/systems/control_affine_kinematic_car.hpp>
-#include <cannon/research/parl/envs/control_affine_kinematic_car.hpp>
+#include <cannon/physics/systems/dynamic_car.hpp>
+#include <cannon/research/parl/envs/dynamic_car.hpp>
 #include <cannon/research/parl/hyperparams.hpp>
 #include <cannon/research/parl/parl.hpp>
 #include <cannon/research/parl_planning/executor.hpp>
@@ -21,6 +21,7 @@ using namespace cannon::physics::systems;
 using namespace cannon::utils;
 
 static Vector2d s_goal = Vector2d::Ones();
+
 
 // Whether to do learning
 static bool learn = false;
@@ -40,36 +41,40 @@ std::vector<double> get_ref_point_times(oc::PathControl &path) {
   return points;
 }
 
+
 MatrixXd make_error_system_refs(oc::PathControl &path) {
   auto times = get_ref_point_times(path);
 
   // Since this is the error system, all dimensions except for time should be
   // zero
-  MatrixXd refs = MatrixXd::Zero(5, times.size());
+  MatrixXd refs = MatrixXd::Zero(6, times.size());
   for (unsigned int i = 0; i < times.size(); i++) {
-    refs(4, i) = times[i];
+    refs(5, i) = times[i];
   }
 
   return refs;
 }
 
+
 oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
-                             std::shared_ptr<ControlAffineKinematicCarEnvironment> env,
+                             std::shared_ptr<DynamicCarEnvironment> env,
                              VectorXd &start_state, VectorXd &goal_state) {
-  assert(start_state.size() == 4);
-  assert(goal_state.size() == 4);
+  assert(start_state.size() == env->get_state_space()->getDimension());
+  assert(goal_state.size() == env->get_action_space()->getDimension());
 
   ob::ScopedState<ob::CompoundStateSpace> start(env->get_state_space());
   start->as<ob::SE2StateSpace::StateType>(0)->setX(start_state[0]);
   start->as<ob::SE2StateSpace::StateType>(0)->setY(start_state[1]);
   start->as<ob::SE2StateSpace::StateType>(0)->setYaw(start_state[2]);
   start->as<ob::RealVectorStateSpace::StateType>(1)->values[0] = start_state[3];
+  start->as<ob::RealVectorStateSpace::StateType>(1)->values[1] = start_state[4];
 
   ob::ScopedState<ob::CompoundStateSpace> goal(env->get_state_space());
   goal->as<ob::SE2StateSpace::StateType>(0)->setX(goal_state[0]);
   goal->as<ob::SE2StateSpace::StateType>(0)->setY(goal_state[1]);
   goal->as<ob::SE2StateSpace::StateType>(0)->setYaw(goal_state[2]);
   goal->as<ob::RealVectorStateSpace::StateType>(1)->values[0] = goal_state[3];
+  goal->as<ob::RealVectorStateSpace::StateType>(1)->values[1] = goal_state[4];
 
   oc::SimpleSetup ss(env->get_action_space());
   auto si = ss.getSpaceInformation();
@@ -87,7 +92,7 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
 
   // Make it clear that KinCarSystem is discrete-time
   si->setStatePropagator(oc::ODESolver::getStatePropagator(
-      odeSolver, CAKinCarSystem::ompl_post_integration));
+      odeSolver, DynamicCarSystem::ompl_post_integration));
 
   ss.setStartAndGoalStates(start, goal, 0.1);
 
@@ -127,6 +132,7 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
   return oc::PathControl(si);
 }
 
+
 std::shared_ptr<ob::StateSpace>
 make_error_state_space(std::shared_ptr<Environment> env, double duration) {
   auto time_space = std::make_shared<ob::RealVectorStateSpace>(1);
@@ -144,6 +150,7 @@ make_error_state_space(std::shared_ptr<Environment> env, double duration) {
   return cspace;
 }
 
+// TODO Still fixing, start here
 void run_exp(ExperimentWriter &w, int seed) {
   // Store seed for future reference
   auto seed_file = w.get_file("seed.txt");
@@ -152,13 +159,13 @@ void run_exp(ExperimentWriter &w, int seed) {
 
   ompl::RNG::setSeed(seed);
 
-  auto env = std::make_shared<ControlAffineKinematicCarEnvironment>();
+  auto env = std::make_shared<DynamicCarEnvironment>();
 
   // Planning for a different length of car
-  auto nominal_sys = std::make_shared<CAKinCarSystem>(0.1);
+  auto nominal_sys = std::make_shared<DynamicCarSystem>(0.1);
 
-  VectorXd start = VectorXd::Zero(4);
-  VectorXd goal = VectorXd::Zero(4);
+  VectorXd start = VectorXd::Zero(5);
+  VectorXd goal = VectorXd::Zero(5);
   goal[0] = s_goal[0];
   goal[1] = s_goal[1];
 
@@ -195,18 +202,18 @@ void run_exp(ExperimentWriter &w, int seed) {
     // TODO Do we want to adjust bounds on action space? State space?
     Hyperparams params;
     params.load_config("/home/cannon/Documents/cannon/cannon/research/"
-                       "experiments/parl_configs/r10c10_kc.yaml");
+                       "experiments/parl_configs/r10c10_dc.yaml");
     auto parl = std::make_shared<Parl>(
         make_error_state_space(env, path.length()), env->get_action_space(),
         make_error_system_refs(path), params, seed);
 
     w.start_log("planned_traj");
     w.write_line("planned_traj",
-                 "timestep,statex,statey,stateth,controlv,controlth");
+                 "timestep,statex,statey,stateth,statev,statedth,controla,controlth");
 
     w.start_log("executed_traj");
     w.write_line("executed_traj",
-                 "timestep,statex,statey,stateth,controlv,controlth");
+                 "timestep,statex,statey,stateth,statev,statedth,controla,controlth");
 
     executor.execute_path(path, parl, w);
 

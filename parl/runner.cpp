@@ -103,6 +103,9 @@ void Runner::run() {
 
   train_reward_file_ << "episode,reward," << std::endl;
   test_reward_file_ << "episode,reward," << std::endl;
+
+  int action_dim = env_->get_action_space()->getDimension();
+  MultivariateNormal dist(MatrixXd::Identity(action_dim, action_dim));
   
   // Main experiment loop
   for (int i = 0; i < training_iterations; i++) {
@@ -115,7 +118,7 @@ void Runner::run() {
       bool done;
 
       VectorXd action = parl_->get_action(state);
-      VectorXd pred_state = parl_->predict_next_state(state, action);
+      action += dist.sample() * 0.1;
       std::tie(new_state, reward, done) = env_->step(action);
       ep_reward += reward;
 

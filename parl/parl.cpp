@@ -106,8 +106,6 @@ VectorXd Parl::get_action(const VectorXd& state, bool testing) {
 
   if (!testing) {
     MultivariateNormal d(MatrixXd::Identity(action_dim_, action_dim_));
-    if (seed_ != 0)
-      d = MultivariateNormal(MatrixXd::Identity(action_dim_, action_dim_));
 
     noise_part = d.sample() * action_noise_scale_;
   }
@@ -165,7 +163,7 @@ std::pair<VectorXd, MatrixXd> Parl::line_search(const VectorXd& k_grad,
   double m = k_grad.norm() + K_grad.norm();
   double t = c * m;
 
-  VectorXd current_action = get_unconstrained_action(state);
+  VectorXd current_action = get_action(state);
   double current_pred_value = predict_value(predict_next_state(state, current_action));
 
   VectorXd ret_k_grad = k_grad;
