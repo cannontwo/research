@@ -143,7 +143,7 @@ std::pair<VectorXd, MatrixXd> Parl::calculate_approx_value_gradient(const Vector
 
   VectorXd pred_next_state = predict_next_state(state, action);
 
-  VectorXd v_x = get_V_matrix_(state);
+  VectorXd v_x = get_V_matrix_(pred_next_state);
   MatrixXd K_grad = B.transpose() * v_x * state.transpose();
   VectorXd k_grad = B.transpose() * v_x;
 
@@ -193,9 +193,6 @@ std::pair<VectorXd, MatrixXd> Parl::line_search(const VectorXd& k_grad,
     ret_K_grad = K_grad * coef;
     i += 1;
   }
-
-  //log_info("Line search for state", state, "ended with coef", coef, "and
-  //    expected improvement", new_pred_value - current_pred_value);
 
   return std::make_pair(ret_k_grad, ret_K_grad);
 }
