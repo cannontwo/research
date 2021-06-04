@@ -3,11 +3,17 @@
 
 #include <chrono>
 
+#include <Eigen/Dense>
+
 #include <ompl/config.h>
 #include <ompl/control/PathControl.h>
 
-#include <cannon/research/parl/environment.hpp>
 #include <cannon/utils/class_forward.hpp>
+
+using namespace Eigen;
+
+namespace oc = ompl::control;
+namespace ob = ompl::base;
 
 namespace cannon {
 
@@ -19,6 +25,7 @@ namespace cannon {
     namespace parl {
 
       CANNON_CLASS_FORWARD(Parl);
+      CANNON_CLASS_FORWARD(Environment);
 
       void noop_post_integration(const ob::State*, const oc::Control*, const double, ob::State*); 
 
@@ -26,7 +33,7 @@ namespace cannon {
         public:
           Executor() = delete;
 
-          Executor(std::shared_ptr<Environment> env, const VectorXd &goal,
+          Executor(EnvironmentPtr env, const VectorXd &goal,
                    double tracking_threshold = 0.5, bool learn = false,
                    bool render = false)
               : tracking_threshold_(tracking_threshold), env_(env), goal_(goal),
@@ -124,7 +131,7 @@ namespace cannon {
            */
           void write_distances_line_(utils::ExperimentWriter &w, const VectorXd& s);
 
-          std::shared_ptr<Environment> env_; //!< Environment to execute controls in
+          EnvironmentPtr env_; //!< Environment to execute controls in
           double tracking_threshold_; //!< Tracking threshold at which replanning is triggered
           VectorXd goal_; //!< Goal for plans
           int overall_timestep_; //!< Total number of timesteps executed in environment

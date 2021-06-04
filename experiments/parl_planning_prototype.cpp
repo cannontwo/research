@@ -150,7 +150,6 @@ make_error_state_space(std::shared_ptr<Environment> env, double duration) {
   return cspace;
 }
 
-// TODO Still fixing, start here
 void run_exp(ExperimentWriter &w, int seed) {
   // Store seed for future reference
   auto seed_file = w.get_file("seed.txt");

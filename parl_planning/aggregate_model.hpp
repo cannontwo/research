@@ -7,18 +7,25 @@
 #include <Eigen/Dense>
 #include <ompl/control/PathControl.h>
 
-#include <cannon/ml/rls.hpp>
-#include <cannon/research/parl/parl.hpp>
-#include <cannon/research/parl_planning/ompl_utils.hpp>
+#include <cannon/physics/systems/system.hpp>
 #include <cannon/research/parl/linear_params.hpp>
+#include <cannon/utils/class_forward.hpp>
 
 using namespace Eigen;
 
-using namespace cannon::ml;
+using namespace cannon::physics::systems;
 
 namespace cannon {
+
+  namespace ml {
+    CANNON_CLASS_FORWARD(RLSFilter);
+  }
+
   namespace research {
     namespace parl {
+
+      CANNON_CLASS_FORWARD(Parl);
+      CANNON_CLASS_FORWARD(Environment);
 
       using VectorXu = Matrix<unsigned int, Dynamic, 1>;
 
@@ -56,12 +63,12 @@ namespace cannon {
 
           virtual std::tuple<MatrixXd, MatrixXd, VectorXd> get_linearization(const VectorXd& x) override;
 
-          void add_local_model(const RLSFilter& model, const VectorXd&
+          void add_local_model(const ml::RLSFilter& model, const VectorXd&
               ref_state, const VectorXd& next_ref_state, 
               const VectorXd& ref_control, double tau, double tau_delta);
 
-          void process_path_parl(std::shared_ptr<Environment> env,
-              std::shared_ptr<Parl> model, oc::PathControl& path);
+          void process_path_parl(EnvironmentPtr env,
+              ParlPtr model, oc::PathControl& path);
 
           LinearParams get_local_model_for_state(const VectorXd& state);
 
@@ -106,7 +113,7 @@ namespace cannon {
            *
            * \returns Total Frobenius norm between linearizations in each cell.
            */
-          double compute_model_error(std::shared_ptr<Environment> env);
+          double compute_model_error(EnvironmentPtr env);
 
         private:
           std::shared_ptr<System> nominal_model_;

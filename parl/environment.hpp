@@ -8,15 +8,22 @@
 #include <ompl/base/StateSpace.h>
 #include <ompl/control/spaces/RealVectorControlSpace.h>
 
-#include <cannon/physics/systems/system.hpp>
+#include <cannon/utils/class_forward.hpp>
 
 namespace ob = ompl::base;
 namespace oc = ompl::control;
 
 using namespace Eigen;
-using namespace cannon::physics::systems;
 
 namespace cannon {
+
+  namespace physics {
+    namespace systems {
+      CANNON_CLASS_FORWARD(System);
+    }
+  }
+
+
   namespace research {
     namespace parl {
 
@@ -28,7 +35,7 @@ namespace cannon {
 
           virtual VectorXd get_state() const = 0;
 
-          virtual std::shared_ptr<System> get_ode_sys() const = 0;
+          virtual cannon::physics::systems::SystemPtr get_ode_sys() const = 0;
 
           virtual MatrixXd sample_random_refs(int num_refs) const {
             auto state_space = get_state_space();

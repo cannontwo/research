@@ -60,8 +60,8 @@ namespace cannon {
             return action_space_;
           }
 
-          virtual std::shared_ptr<System> get_ode_sys() const override {
-            return std::make_shared<KinCarSystem>(kc_.s_);
+          virtual std::shared_ptr<systems::System> get_ode_sys() const override {
+            return std::make_shared<systems::KinCarSystem>(kc_.s_);
           }
 
           virtual VectorXd get_state() const override {

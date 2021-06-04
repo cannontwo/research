@@ -4,6 +4,7 @@
 #include <ompl/base/spaces/SO2StateSpace.h>
 #include <ompl/base/spaces/RealVectorStateSpace.h>
 
+#include <cannon/research/parl/parl.hpp>
 #include <cannon/research/parl/runner.hpp>
 #include <cannon/research/parl/envs/kinematic_car.hpp>
 

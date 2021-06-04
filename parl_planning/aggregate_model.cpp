@@ -3,10 +3,19 @@
 #include <queue>
 
 #include <thirdparty/HighFive/include/highfive/H5Easy.hpp>
+#include <ompl/base/ScopedState.h>
 
 #include <cannon/math/lattice_points.hpp>
+#include <cannon/log/registry.hpp>
+#include <cannon/research/parl_planning/ompl_utils.hpp>
+#include <cannon/research/parl/parl.hpp>
+#include <cannon/research/parl/environment.hpp>
+#include <cannon/ml/rls.hpp>
 
 using namespace cannon::research::parl;
+using namespace cannon::log;
+using namespace cannon::ml;
+using namespace cannon::math;
 
 void AggregateModel::operator()(const VectorXd& s, VectorXd& dsdt, const double t) {
 

@@ -62,8 +62,8 @@ namespace cannon {
             return state_;
           }
 
-          virtual std::shared_ptr<System> get_ode_sys() const override {
-            return std::make_shared<Hol2DSystem>(h2d_.s_);
+          virtual std::shared_ptr<systems::System> get_ode_sys() const override {
+            return std::make_shared<systems::Hol2DSystem>(h2d_.s_);
           }
           
           virtual MatrixXd sample_grid_refs(int rows, int cols) const override {

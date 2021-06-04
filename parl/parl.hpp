@@ -1,103 +1,50 @@
 #ifndef CANNON_RESEARCH_PARL_PARL_H
 #define CANNON_RESEARCH_PARL_PARL_H 
 
-#include <stdexcept>
 #include <vector>
-#include <cassert>
 #include <utility>
-#include <random>
 
 #include <Eigen/Dense>
 #include <ompl/base/StateSpace.h>
-#include <ompl/base/ScopedState.h>
 #include <ompl/control/spaces/RealVectorControlSpace.h>
 
-#include <cannon/geom/kd_tree_indexed.hpp>
 #include <cannon/control/affine_controller.hpp>
 #include <cannon/ml/piecewise_lstd.hpp>
 #include <cannon/ml/piecewise_recursive_lstd.hpp>
 #include <cannon/ml/rls.hpp>
 #include <cannon/research/parl/hyperparams.hpp>
-#include <cannon/research/parl/linear_params.hpp>
-#include <cannon/research/parl_stability/voronoi.hpp>
-#include <cannon/math/multivariate_normal.hpp>
-
+#include <cannon/utils/class_forward.hpp>
 
 using namespace Eigen;
 
-using namespace cannon::geom;
 using namespace cannon::control;
 using namespace cannon::ml;
-using namespace cannon::math;
 
 namespace ob = ompl::base;
 namespace oc = ompl::control;
 
 namespace cannon {
+
+  namespace geom {
+    CANNON_CLASS_FORWARD(KDTreeIndexed);
+  }
+
   namespace research {
     namespace parl {
+
+      CANNON_CLASS_FORWARD(AutonomousLinearParams);
 
       class Parl {
         public:
           Parl() = delete;
-          
-          Parl(const std::shared_ptr<ob::StateSpace> state_space, const
-              std::shared_ptr<oc::RealVectorControlSpace> action_space, const MatrixXd&
-              refs, Hyperparams params, int seed = 0, bool stability = false) :
-            state_dim_(state_space->getDimension()),
-            action_dim_(action_space->getDimension()),
-            state_space_(state_space), action_space_(action_space),
-            seed_(seed), refs_(refs), params_(params),
-          value_model_(state_dim_, refs.cols(), params.discount_factor),
-          ref_tree_(state_dim_), stability_(stability) {
 
-            if (refs_.rows() != state_dim_)
-              throw std::runtime_error("PARL reference points have the wrong dimension");
-            num_refs_ = refs_.cols();
-
-            if (seed_ != 0) {
-              // Set seed across all instances of multivariate normal distribution
-              MultivariateNormal::set_seed(seed_);
-            }
-
-            if (params_.use_line_search && params_.controller_learning_rate != 1.0) {
-              throw std::runtime_error("When using line search, learning rate should be 1");
-            }
-            
-            
-            ref_tree_.insert(refs_);
-
-            for (int i = 0; i < num_refs_; i++) {
-              // The dynamics models predict on (state, action) -> state
-              dynamics_models_.emplace_back(state_dim_ + action_dim_,
-                  state_dim_, params_.alpha, params_.forgetting_factor);
-
-              controllers_.emplace_back(state_dim_, action_dim_,
-                  params_.controller_learning_rate, params_.use_adam);
-
-              // Checking KDT construction
-              assert(ref_tree_.get_nearest_idx(refs_.col(i)) == i);
-            }
-
-            VectorXd zero_vec = VectorXd::Zero(state_dim_);
-
-            // Find indices of regions containing zero
-            if (stability_) {
-              auto diagram = compute_voronoi_diagram(refs_);
-              auto polys = create_bounded_voronoi_polygons(refs_, diagram);
-
-              for (unsigned int i = 0; i < refs.size(); i++) {
-                if (is_inside(Vector2d::Zero(), polys[i])) {
-                  zero_ref_idxs_.push_back(i);
-                }
-              }
-
-              log_info("References whose Voronoi regions cover (0, 0):");
-              for (auto idx : zero_ref_idxs_) {
-                log_info("\t (", idx, "):", refs.col(idx));
-              }
-            }
-          }
+          /*!
+           * \brief Constructor
+           */
+          Parl(const std::shared_ptr<ob::StateSpace> state_space,
+               const std::shared_ptr<oc::RealVectorControlSpace> action_space,
+               const MatrixXd &refs, Hyperparams params, int seed = 0,
+               bool stability = false);
 
           void process_datum(const VectorXd& state, const VectorXd& action,
               double reward, const VectorXd& next_state, bool done = false,
@@ -170,7 +117,7 @@ namespace cannon {
           PiecewiseLSTDFilter value_model_;
           //PiecewiseRecursiveLSTDFilter value_model_;
 
-          KDTreeIndexed ref_tree_;
+          geom::KDTreeIndexedPtr ref_tree_;
 
           bool stability_;
       };

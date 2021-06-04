@@ -11,6 +11,7 @@
 #include <cannon/research/parl/environment.hpp>
 #include <cannon/physics/systems/dynamic_car.hpp>
 #include <cannon/utils/blocking_queue.hpp>
+#include <cannon/utils/class_forward.hpp>
 
 #ifdef CANNON_BUILD_GRAPHICS
   #include <cannon/graphics/deferred_renderer.hpp>
@@ -73,8 +74,8 @@ namespace cannon {
             return action_space_;
           }
 
-          virtual std::shared_ptr<System> get_ode_sys() const override {
-            return std::make_shared<DynamicCarSystem>(kc_.s_);
+          virtual std::shared_ptr<systems::System> get_ode_sys() const override {
+            return std::make_shared<systems::DynamicCarSystem>(kc_.s_);
           }
 
           virtual VectorXd get_state() const override {

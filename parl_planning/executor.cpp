@@ -4,11 +4,13 @@
 
 #include <cannon/research/parl/parl.hpp>
 #include <cannon/research/parl_planning/ompl_utils.hpp>
+#include <cannon/research/parl/environment.hpp>
 #include <cannon/utils/experiment_writer.hpp>
+#include <cannon/log/registry.hpp>
 
 using namespace cannon::research::parl;
 using namespace cannon::utils;
-
+using namespace cannon::log;
 
 void Executor::execute_path( oc::PathControl &path, std::shared_ptr<Parl> parl,
     ExperimentWriter &w) {

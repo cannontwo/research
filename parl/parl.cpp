@@ -1,8 +1,78 @@
 #include <cannon/research/parl/parl.hpp>
 
+#include <stdexcept>
+#include <cassert>
+#include <random>
+
+#include <cannon/geom/kd_tree_indexed.hpp>
+#include <cannon/research/parl_stability/voronoi.hpp>
+#include <cannon/math/multivariate_normal.hpp>
+#include <cannon/research/parl/linear_params.hpp>
+
 using namespace cannon::research::parl;
+using namespace cannon::geom;
+using namespace cannon::math;
 
 // Public methods
+
+Parl::Parl(const std::shared_ptr<ob::StateSpace> state_space,
+           const std::shared_ptr<oc::RealVectorControlSpace> action_space,
+           const MatrixXd &refs, Hyperparams params, int seed,
+           bool stability)
+    : state_dim_(state_space->getDimension()),
+      action_dim_(action_space->getDimension()), state_space_(state_space),
+      action_space_(action_space), seed_(seed), refs_(refs), params_(params),
+      value_model_(state_dim_, refs.cols(), params.discount_factor),
+      ref_tree_(new KDTreeIndexed(state_dim_)), stability_(stability) {
+
+  if (refs_.rows() != state_dim_)
+    throw std::runtime_error("PARL reference points have the wrong dimension");
+  num_refs_ = refs_.cols();
+
+  if (seed_ != 0) {
+    // Set seed across all instances of multivariate normal distribution
+    MultivariateNormal::set_seed(seed_);
+  }
+
+  if (params_.use_line_search && params_.controller_learning_rate != 1.0) {
+    throw std::runtime_error("When using line search, learning rate should be 1");
+  }
+  
+  
+  ref_tree_->insert(refs_);
+
+  for (int i = 0; i < num_refs_; i++) {
+    // The dynamics models predict on (state, action) -> state
+    dynamics_models_.emplace_back(state_dim_ + action_dim_,
+        state_dim_, params_.alpha, params_.forgetting_factor);
+
+    controllers_.emplace_back(state_dim_, action_dim_,
+        params_.controller_learning_rate, params_.use_adam);
+
+    // Checking KDT construction
+    assert(ref_tree_->get_nearest_idx(refs_.col(i)) == i);
+  }
+
+  VectorXd zero_vec = VectorXd::Zero(state_dim_);
+
+  // Find indices of regions containing zero
+  if (stability_) {
+    auto diagram = compute_voronoi_diagram(refs_);
+    auto polys = create_bounded_voronoi_polygons(refs_, diagram);
+
+    for (unsigned int i = 0; i < refs.size(); i++) {
+      if (is_inside(Vector2d::Zero(), polys[i])) {
+        zero_ref_idxs_.push_back(i);
+      }
+    }
+
+    log_info("References whose Voronoi regions cover (0, 0):");
+    for (auto idx : zero_ref_idxs_) {
+      log_info("\t (", idx, "):", refs.col(idx));
+    }
+  }
+}
+
 void Parl::process_datum(const VectorXd& state, const VectorXd& action,
     double reward, const VectorXd& next_state, bool done,
     bool use_local) {
@@ -10,8 +80,8 @@ void Parl::process_datum(const VectorXd& state, const VectorXd& action,
   check_state_dim_(next_state);
   check_action_dim_(action);
 
-  int idx = ref_tree_.get_nearest_idx(state);
-  int next_idx = ref_tree_.get_nearest_idx(next_state);
+  int idx = ref_tree_->get_nearest_idx(state);
+  int next_idx = ref_tree_->get_nearest_idx(next_state);
 
   if (use_local) {
     VectorXd local_state = make_local_state_(state);
@@ -27,7 +97,7 @@ void Parl::process_datum(const VectorXd& state, const VectorXd& action,
 void Parl::value_grad_update_controller(const VectorXd& state) {
   check_state_dim_(state);
 
-  int idx = ref_tree_.get_nearest_idx(state);
+  int idx = ref_tree_->get_nearest_idx(state);
 
   VectorXd k_grad;
   MatrixXd K_grad;
@@ -61,7 +131,7 @@ VectorXd Parl::predict_next_state(const VectorXd& state, const VectorXd& action,
   check_state_dim_(state);
   check_action_dim_(action);
 
-  int idx = ref_tree_.get_nearest_idx(state);
+  int idx = ref_tree_->get_nearest_idx(state);
   if (use_local) {
     VectorXd local_state = make_local_state_(state);
     VectorXd c = make_combined_vec_(local_state, action);
@@ -76,7 +146,7 @@ VectorXd Parl::predict_next_state(const VectorXd& state, const VectorXd& action,
 double Parl::predict_value(const VectorXd& state, bool use_local) {
   check_state_dim_(state);
 
-  int idx = ref_tree_.get_nearest_idx(state); 
+  int idx = ref_tree_->get_nearest_idx(state); 
   if (use_local)
     throw std::runtime_error("Not implemented");
   else
@@ -94,7 +164,7 @@ VectorXd Parl::compute_value_gradient(const VectorXd& state) {
 VectorXd Parl::get_unconstrained_action(const VectorXd& state) {
   check_state_dim_(state);
 
-  int idx = ref_tree_.get_nearest_idx(state);
+  int idx = ref_tree_->get_nearest_idx(state);
   return controllers_[idx].get_action(state);
 }
 
@@ -130,7 +200,7 @@ VectorXd Parl::simulated_step(const VectorXd& state, const VectorXd& action) {
 std::pair<VectorXd, MatrixXd> Parl::calculate_approx_value_gradient(const VectorXd& state) {
   check_state_dim_(state);
 
-  int idx = ref_tree_.get_nearest_idx(state);
+  int idx = ref_tree_->get_nearest_idx(state);
 
   MatrixXd A = get_A_matrix_idx_(idx);
   MatrixXd B = get_B_matrix_idx_(idx);
@@ -213,7 +283,7 @@ unsigned int Parl::get_nearest_ref_idx(const VectorXd& query) {
   if (query.size() != state_dim_)
     throw std::runtime_error("Passed state had the wrong dimension");
   
-  return ref_tree_.get_nearest_idx(query);
+  return ref_tree_->get_nearest_idx(query);
 }
 
 std::vector<AutonomousLinearParams> Parl::get_controlled_system() {
@@ -291,7 +361,7 @@ VectorXd Parl::make_combined_vec_(const VectorXd& state, const VectorXd& action)
 VectorXd Parl::make_local_state_(const VectorXd& global_state) {
   check_state_dim_(global_state);
 
-  VectorXd r = ref_tree_.get_nearest_neighbor(global_state).first;
+  VectorXd r = ref_tree_->get_nearest_neighbor(global_state).first;
   return global_state - r;
 }
 
@@ -310,14 +380,14 @@ double Parl::calculate_td_target_(double reward, const VectorXd& next_state,
 VectorXd Parl::get_V_matrix_(const VectorXd& state) {
   check_state_dim_(state);
 
-  int idx = ref_tree_.get_nearest_idx(state); 
+  int idx = ref_tree_->get_nearest_idx(state); 
   return value_model_.get_mat(idx);
 }
 
 MatrixXd Parl::get_B_matrix_(const VectorXd& state) {
   check_state_dim_(state);
 
-  int idx = ref_tree_.get_nearest_idx(state);
+  int idx = ref_tree_->get_nearest_idx(state);
   MatrixXd theta = dynamics_models_[idx].get_identified_mats().first;
   return theta.rightCols(action_dim_);
 }
@@ -355,7 +425,7 @@ VectorXd Parl::get_k_vector_idx_(int idx) {
 MatrixXd Parl::get_pred_covar_(const VectorXd& state) {
   check_state_dim_(state);
 
-  int idx = ref_tree_.get_nearest_idx(state);
+  int idx = ref_tree_->get_nearest_idx(state);
   return dynamics_models_[idx].get_pred_error_covar();
 }
 

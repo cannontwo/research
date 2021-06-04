@@ -10,74 +10,39 @@
 #include <yaml-cpp/yaml.h>
 #include <Eigen/Dense>
 
-#include <cannon/research/parl/parl.hpp>
-#include <cannon/research/parl/hyperparams.hpp>
-#include <cannon/research/parl/environment.hpp>
-#include <cannon/log/registry.hpp>
-#include <cannon/math/multivariate_normal.hpp>
-#include <cannon/research/parl_stability/voronoi.hpp>
-#include <cannon/research/parl_stability/transition_map.hpp>
-#include <cannon/graphics/random_color.hpp>
-
-# ifdef CANNON_BUILD_GRAPHICS
-  #include <cannon/plot/plotter.hpp>
-  using namespace cannon::plot;
-# endif
+#include <cannon/utils/class_forward.hpp>
 
 using namespace Eigen;
-
-using namespace cannon::log;
-using namespace cannon::math;
 
 namespace cannon {
   namespace research {
     namespace parl {
 
+      CANNON_CLASS_FORWARD(Environment);
+      CANNON_CLASS_FORWARD(Parl);
+
       class Runner {
         public:
           Runner() = delete;
 
-          Runner(std::shared_ptr<Environment> env, std::shared_ptr<Parl> p,
-              const std::string& config_filename, bool render = false) :
-            env_(env), parl_(p), render_(render) {
-            
-            load_config(config_filename);
+          /*!
+           * \brief Constructor taking environment, PARL pointer, and config
+           * file to load.
+           */
+          Runner(EnvironmentPtr env, ParlPtr p,
+              const std::string& config_filename, bool render = false);
 
-            env_->reset();
-          }
-
-          Runner(std::shared_ptr<Environment> env, const std::string&
-              config_filename, bool render = false, bool stability = false) :
-            env_(env), render_(render) {
-
-            load_config(config_filename);
-            MatrixXd refs = sample_refs_();
-
-# ifdef CANNON_BUILD_GRAPHICS
-            if (refs.rows() == 2 && render_) {
-              log_info("Plotting refs");
-              MatrixX2f tmp = refs.transpose().cast<float>();
-
-              Plotter plotter;
-              plotter.plot_points(tmp);
-              plotter.render();
-            }
-# endif
-
-            Hyperparams params;
-            params.load_config(config_filename);
-            parl_ = std::make_shared<Parl>(env_->get_state_space(),
-                env->get_action_space(), refs, params, 0, stability);
-
-            env_->reset();
-
-          }
+          /*!
+           * \brief Constructor taking environment and config filename.
+           */
+          Runner(EnvironmentPtr env, const std::string&
+              config_filename, bool render = false, bool stability = false);
 
           void load_config(const std::string& filename);
           void run();
 
-          std::shared_ptr<Parl> get_agent();
-          std::shared_ptr<Environment> get_env();
+          ParlPtr get_agent();
+          EnvironmentPtr get_env();
 
           std::string env_name;
           std::string exp_id;
@@ -109,8 +74,8 @@ namespace cannon {
           void do_tests_(int ep_num);
 
 
-          std::shared_ptr<Environment> env_;
-          std::shared_ptr<Parl> parl_;
+          EnvironmentPtr env_;
+          ParlPtr parl_;
 
           std::vector<double> ep_rewards_;
           std::vector<double> test_rewards_;
