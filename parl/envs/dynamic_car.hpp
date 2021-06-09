@@ -28,7 +28,6 @@ namespace cannon {
   namespace research {
     namespace parl {
 
-
       class DynamicCarEnvironment : public Environment {
         public:
 
@@ -41,25 +40,29 @@ namespace cannon {
             sb.setHigh(2.0);
             se2_part->setBounds(sb);
             se2_part->setup();
+            se2_part->setSubspaceWeight(1, 10.0);
 
             auto deriv_part = std::make_shared<ob::RealVectorStateSpace>(2);
             ob::RealVectorBounds vb(2);
-            vb.setLow(-1.0);
-            vb.setHigh(1.0);
+            vb.low[0] = -1.0;
+            vb.high[0] = 1.0;
+            vb.low[1] = -M_PI * 30 / 180.0;
+            vb.high[1] = M_PI * 30 / 180.0;
+
             deriv_part->setBounds(vb);
             deriv_part->setup();
 
             state_space_ = std::make_shared<ob::CompoundStateSpace>();
             state_space_->addSubspace(se2_part, 1.0);
-            state_space_->addSubspace(deriv_part, 1.0);
+            state_space_->addSubspace(deriv_part, 0.3);
             state_space_->setup();
 
             action_space_ = std::make_shared<oc::RealVectorControlSpace>(state_space_, 2);
             ob::RealVectorBounds ab(2);
-            ab.setLow(0, -1.0);
-            ab.setLow(1, -M_PI * 30.0 / 180.0);
-            ab.setHigh(0, 1.0);
-            ab.setHigh(1, M_PI * 30.0 / 180.0);
+            ab.setLow(0, -0.5);
+            ab.setLow(1, -M_PI * 2.0 / 180.0);
+            ab.setHigh(0, 0.5);
+            ab.setHigh(1, M_PI * 2.0 / 180.0);
             action_space_->setBounds(ab);
             action_space_->setup();
 

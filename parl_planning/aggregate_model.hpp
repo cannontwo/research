@@ -63,6 +63,11 @@ namespace cannon {
 
           virtual std::tuple<MatrixXd, MatrixXd, VectorXd> get_linearization(const VectorXd& x) override;
 
+          virtual void
+          get_continuous_time_linearization(const oc::ODESolver::StateType &q,
+                                            Ref<MatrixXd> A,
+                                            Ref<MatrixXd> B) override;
+
           void add_local_model(const ml::RLSFilter& model, const VectorXd&
               ref_state, const VectorXd& next_ref_state, 
               const VectorXd& ref_control, double tau, double tau_delta);

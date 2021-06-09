@@ -13,6 +13,8 @@
 #include <cannon/research/parl/parl.hpp>
 #include <cannon/research/parl_planning/executor.hpp>
 #include <cannon/research/parl_planning/aggregate_model.hpp>
+#include <cannon/research/parl_planning/lqr_control_space.hpp>
+#include <cannon/research/parl_planning/lqr_state_propagator.hpp>
 #include <cannon/utils/experiment_runner.hpp>
 #include <cannon/utils/experiment_writer.hpp>
 
@@ -41,7 +43,6 @@ std::vector<double> get_ref_point_times(oc::PathControl &path) {
   return points;
 }
 
-
 MatrixXd make_error_system_refs(oc::PathControl &path) {
   auto times = get_ref_point_times(path);
 
@@ -54,7 +55,6 @@ MatrixXd make_error_system_refs(oc::PathControl &path) {
 
   return refs;
 }
-
 
 oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
                              std::shared_ptr<DynamicCarEnvironment> env,
@@ -76,7 +76,17 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
   goal->as<ob::RealVectorStateSpace::StateType>(1)->values[0] = goal_state[3];
   goal->as<ob::RealVectorStateSpace::StateType>(1)->values[1] = goal_state[4];
 
-  oc::SimpleSetup ss(env->get_action_space());
+  //oc::SimpleSetup ss(env->get_action_space());
+  auto lqr_action_space = std::make_shared<LQRControlSpace>(env->get_state_space(), 2);
+  ob::RealVectorBounds bounds(2);
+  bounds.low[0] = -0.5;
+  bounds.high[0] = 0.5;
+  bounds.low[1] = -M_PI * 2.0 / 180.0;
+  bounds.high[1] = M_PI * 2.0 / 180.0;
+  lqr_action_space->setBounds(bounds);
+  lqr_action_space->setup();
+
+  oc::SimpleSetup ss(lqr_action_space);
   auto si = ss.getSpaceInformation();
 
   si->setStateValidityChecker([si](const ob::State *state) {
@@ -84,15 +94,32 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
     return si->satisfiesBounds(state);
   });
 
-  auto odeSolver(std::make_shared<oc::ODEBasicSolver<>>(
-      si, [&](const oc::ODESolver::StateType &q, const oc::Control *control,
-              oc::ODESolver::StateType &qdot) {
-        sys->ompl_ode_adaptor(q, control, qdot);
-      }));
+  auto odeFn = [&](const oc::ODESolver::StateType &q, const oc::Control *control,
+                 oc::ODESolver::StateType &qdot) {
+    VectorXd u(2);
+    lqr_action_space->compute_u_star(control, q, u);
+
+    oc::Control *computed_lqr_control = env->get_action_space()->allocControl();
+
+    computed_lqr_control->as<oc::RealVectorControlSpace::ControlType>()
+        ->values[0] = u[0];
+    computed_lqr_control->as<oc::RealVectorControlSpace::ControlType>()
+        ->values[1] = u[1];
+
+    sys->ompl_ode_adaptor(q, computed_lqr_control, qdot);
+  };
+
+  auto linearizationFn = [&](const oc::ODESolver::StateType &q,
+                             const oc::ODESolver::StateType &, Ref<MatrixXd> A,
+                             Ref<MatrixXd> B) {
+    sys->get_continuous_time_linearization(q, A, B);
+  };
 
   // Make it clear that KinCarSystem is discrete-time
-  si->setStatePropagator(oc::ODESolver::getStatePropagator(
-      odeSolver, DynamicCarSystem::ompl_post_integration));
+  //si->setStatePropagator(oc::ODESolver::getStatePropagator(
+  //    odeSolver, DynamicCarSystem::ompl_post_integration));
+  si->setStatePropagator(std::make_shared<LQRStatePropagator>(
+      si, odeFn, linearizationFn, DynamicCarSystem::ompl_post_integration));
 
   ss.setStartAndGoalStates(start, goal, 0.1);
 
@@ -106,6 +133,7 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
   ss.setPlanner(planner);
 
   ss.setup();
+  ss.print();
 
   double plan_time = 1.0;
   bool have_plan = false;
@@ -115,10 +143,12 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
     log_info("Planning for", plan_time, "seconds");
     ob::PlannerStatus solved = ss.solve(plan_time);
     if (solved) {
-      if (ss.haveExactSolutionPath()) {
+      //if (ss.haveExactSolutionPath()) {
+      if (true) {
         std::cout << "Found solution:" << std::endl;
         ss.getSolutionPath().printAsMatrix(std::cout);
 
+        // TODO Need to modify this path to contain controls, not LQR matrices
         return ss.getSolutionPath();
       } else {
         plan_time *= 2.0;
@@ -131,7 +161,6 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
   // If we get here, planning has failed 
   return oc::PathControl(si);
 }
-
 
 std::shared_ptr<ob::StateSpace>
 make_error_state_space(std::shared_ptr<Environment> env, double duration) {
