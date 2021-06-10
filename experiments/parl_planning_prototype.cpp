@@ -1,4 +1,5 @@
 #include <ompl/base/goals/GoalState.h>
+#include <ompl/base/goals/GoalRegion.h>
 #include <ompl/config.h>
 #include <ompl/control/ODESolver.h>
 #include <ompl/control/SimpleSetup.h>
@@ -29,6 +30,64 @@ static Vector2d s_goal = Vector2d::Ones();
 static bool learn = false;
 static double tracking_threshold = 1.0;
 
+class DynamicCarProjector : public ob::ProjectionEvaluator
+{
+public:
+    DynamicCarProjector(const ob::StateSpace *space) : ob::ProjectionEvaluator(space)
+    {
+    }
+    unsigned int getDimension() const override
+    {
+        return 3u;
+    }
+    void project(const ob::State *state, Eigen::Ref<Eigen::VectorXd> projection) const override
+    {
+        auto cstate = state->as<ob::CompoundStateSpace::StateType>();
+        projection[0] = cstate->as<ob::SE2StateSpace::StateType>(0)->getX();
+        projection[1] = cstate->as<ob::SE2StateSpace::StateType>(0)->getY();
+        projection[2] = cstate->as<ob::SE2StateSpace::StateType>(0)->getYaw();
+    }
+};
+
+class SubsetGoalRegion : public ob::GoalRegion {
+  public:
+    SubsetGoalRegion(const ob::SpaceInformationPtr &si,
+                     const Ref<const Vector2d> &geom_goal)
+        : ob::GoalRegion(si), geom_goal_(geom_goal) {
+      setThreshold(0.1);
+    }
+
+    virtual double distanceGoal(const ob::State *st) const override {
+
+      auto se2 =
+        si_->getStateSpace()->as<ob::CompoundStateSpace>()->as<ob::SE2StateSpace>(0);
+      auto r2 = se2->as<ob::RealVectorStateSpace>(0);
+
+      //auto current_geom = st->as<ob::CompoundStateSpace::StateType>()
+      //                        ->as<ob::SE2StateSpace::StateType>(0);
+      //auto goal_geom = se2->allocState()->as<ob::SE2StateSpace::StateType>();
+      //goal_geom->setX(geom_goal_[0]);
+      //goal_geom->setY(geom_goal_[1]);
+      //goal_geom->setYaw(geom_goal_[2]);
+      //double distance = se2->distance(current_geom, goal_geom);
+      //se2->freeState(goal_geom);
+
+      auto current_geom = st->as<ob::CompoundStateSpace::StateType>()
+                              ->as<ob::SE2StateSpace::StateType>(0)
+                              ->as<ob::RealVectorStateSpace::StateType>(0);
+      auto goal_geom = r2->allocState()->as<ob::RealVectorStateSpace::StateType>();
+      goal_geom->values[0] = geom_goal_[0];
+      goal_geom->values[1] = geom_goal_[1];
+      double distance = r2->distance(current_geom, goal_geom);
+      r2->freeState(goal_geom);
+
+      return distance;
+    }
+
+  private:
+    Vector2d geom_goal_;
+};
+
 std::vector<double> get_ref_point_times(oc::PathControl &path) {
   // Placing reference points halfway between each waypoint on the path
   std::vector<double> durations = path.getControlDurations();
@@ -56,25 +115,15 @@ MatrixXd make_error_system_refs(oc::PathControl &path) {
   return refs;
 }
 
+oc::PathControl get_vector_control_path(const oc::PathControl& lqr_path) {
+
+}
+
 oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
                              std::shared_ptr<DynamicCarEnvironment> env,
                              VectorXd &start_state, VectorXd &goal_state) {
   assert(start_state.size() == env->get_state_space()->getDimension());
   assert(goal_state.size() == env->get_action_space()->getDimension());
-
-  ob::ScopedState<ob::CompoundStateSpace> start(env->get_state_space());
-  start->as<ob::SE2StateSpace::StateType>(0)->setX(start_state[0]);
-  start->as<ob::SE2StateSpace::StateType>(0)->setY(start_state[1]);
-  start->as<ob::SE2StateSpace::StateType>(0)->setYaw(start_state[2]);
-  start->as<ob::RealVectorStateSpace::StateType>(1)->values[0] = start_state[3];
-  start->as<ob::RealVectorStateSpace::StateType>(1)->values[1] = start_state[4];
-
-  ob::ScopedState<ob::CompoundStateSpace> goal(env->get_state_space());
-  goal->as<ob::SE2StateSpace::StateType>(0)->setX(goal_state[0]);
-  goal->as<ob::SE2StateSpace::StateType>(0)->setY(goal_state[1]);
-  goal->as<ob::SE2StateSpace::StateType>(0)->setYaw(goal_state[2]);
-  goal->as<ob::RealVectorStateSpace::StateType>(1)->values[0] = goal_state[3];
-  goal->as<ob::RealVectorStateSpace::StateType>(1)->values[1] = goal_state[4];
 
   //oc::SimpleSetup ss(env->get_action_space());
   auto lqr_action_space = std::make_shared<LQRControlSpace>(env->get_state_space(), 2);
@@ -88,6 +137,9 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
 
   oc::SimpleSetup ss(lqr_action_space);
   auto si = ss.getSpaceInformation();
+
+  si->getStateSpace()->registerDefaultProjection(
+      std::make_shared<DynamicCarProjector>(si->getStateSpace().get()));
 
   si->setStateValidityChecker([si](const ob::State *state) {
     // TODO Make real validity checker with obstacle geometry
@@ -121,7 +173,25 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
   si->setStatePropagator(std::make_shared<LQRStatePropagator>(
       si, odeFn, linearizationFn, DynamicCarSystem::ompl_post_integration));
 
-  ss.setStartAndGoalStates(start, goal, 0.1);
+  ob::ScopedState<ob::CompoundStateSpace> start(env->get_state_space());
+  start->as<ob::SE2StateSpace::StateType>(0)->setX(start_state[0]);
+  start->as<ob::SE2StateSpace::StateType>(0)->setY(start_state[1]);
+  start->as<ob::SE2StateSpace::StateType>(0)->setYaw(start_state[2]);
+  start->as<ob::RealVectorStateSpace::StateType>(1)->values[0] = start_state[3];
+  start->as<ob::RealVectorStateSpace::StateType>(1)->values[1] = start_state[4];
+
+  //ob::ScopedState<ob::CompoundStateSpace> goal(env->get_state_space());
+  //goal->as<ob::SE2StateSpace::StateType>(0)->setX(goal_state[0]);
+  //goal->as<ob::SE2StateSpace::StateType>(0)->setY(goal_state[1]);
+  //goal->as<ob::SE2StateSpace::StateType>(0)->setYaw(goal_state[2]);
+  //goal->as<ob::RealVectorStateSpace::StateType>(1)->values[0] = goal_state[3];
+  //goal->as<ob::RealVectorStateSpace::StateType>(1)->values[1] = goal_state[4];
+
+  //ss.setStartAndGoalStates(start, goal, 0.1);
+  ss.setStartState(start);
+  Vector3d geom_goal(2);
+  geom_goal << goal_state[0], goal_state[1];
+  ss.setGoal(std::make_shared<SubsetGoalRegion>(ss.getSpaceInformation(), geom_goal));
 
   // Necessary for discrete-time model
   ss.getSpaceInformation()->setPropagationStepSize(env->get_time_step());
@@ -131,9 +201,8 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
   //auto planner = std::make_shared<oc::SST>(ss.getSpaceInformation());
   auto planner = std::make_shared<oc::RRT>(ss.getSpaceInformation());
   ss.setPlanner(planner);
-
   ss.setup();
-  ss.print();
+  //ss.print();
 
   double plan_time = 1.0;
   bool have_plan = false;
@@ -143,12 +212,11 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
     log_info("Planning for", plan_time, "seconds");
     ob::PlannerStatus solved = ss.solve(plan_time);
     if (solved) {
-      //if (ss.haveExactSolutionPath()) {
-      if (true) {
+      if (ss.haveExactSolutionPath()) {
         std::cout << "Found solution:" << std::endl;
         ss.getSolutionPath().printAsMatrix(std::cout);
 
-        // TODO Need to modify this path to contain controls, not LQR matrices
+        // TODO Handle planned LQR controls 
         return ss.getSolutionPath();
       } else {
         plan_time *= 2.0;
@@ -214,7 +282,6 @@ void run_exp(ExperimentWriter &w, int seed) {
 
   // TODO Record closest approach to goal at each timestep up to max number of
   // timesteps
-  // TODO Run planner without PARL as well
   Executor executor(env, goal, tracking_threshold, learn);
 
   while ((env->get_state() - goal).norm() > 0.1 && executor.get_overall_timestep() < 1e3) {
@@ -227,7 +294,7 @@ void run_exp(ExperimentWriter &w, int seed) {
       break;
     }
 
-    // TODO Do we want to adjust bounds on action space? State space?
+    // TODO Adjust bounds on action space? State space?
     Hyperparams params;
     params.load_config("/home/cannon/Documents/cannon/cannon/research/"
                        "experiments/parl_configs/r10c10_dc.yaml");

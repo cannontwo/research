@@ -122,7 +122,7 @@ namespace cannon {
             state_[1] = std::max(-2.0, std::min(2.0, state_[1]));
             state_[2] = std::atan2(std::sin(state_[2]), std::cos(state_[2]));
             state_[3] = std::max(-1.0, std::min(1.0, state_[3]));
-            state_[4] = std::max(-1.0, std::min(1.0, state_[4]));
+            state_[4] = std::max(-M_PI * 30 / 180.0, std::min(M_PI * 30 / 180.0, state_[4]));
 
             return std::make_tuple(state_, reward, false);
           }
