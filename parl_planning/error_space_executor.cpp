@@ -1,4 +1,4 @@
-#include <cannon/research/parl_planning/executor.hpp>
+#include <cannon/research/parl_planning/error_space_executor.hpp>
 
 #include <cassert>
 
@@ -12,7 +12,7 @@ using namespace cannon::research::parl;
 using namespace cannon::utils;
 using namespace cannon::log;
 
-void Executor::execute_path( oc::PathControl &path, std::shared_ptr<Parl> parl,
+void ErrorSpaceExecutor::execute_path( oc::PathControl &path, std::shared_ptr<Parl> parl,
     ExperimentWriter &w) {
   std::vector<ob::State *> states = path.getStates();
   std::vector<oc::Control *> controls = path.getControls();
@@ -43,7 +43,6 @@ void Executor::execute_path( oc::PathControl &path, std::shared_ptr<Parl> parl,
 
     Vector2d c = get_control_from_ompl_control(env_, controls[i]);
 
-
     // log_info("Executing control", c, "for", control_dur.count(),
     // "milliseconds");
 
@@ -56,7 +55,7 @@ void Executor::execute_path( oc::PathControl &path, std::shared_ptr<Parl> parl,
            (env_->get_state() - goal_).norm());
 }
 
-void Executor::execute_control_for_duration(ParlPtr parl, const VectorXd &s,
+void ErrorSpaceExecutor::execute_control_for_duration(ParlPtr parl, const VectorXd &s,
     const VectorXd &next_s, const VectorXd &c, double start_time,
     double control_dur, ExperimentWriter &w) {
 
@@ -117,7 +116,7 @@ void Executor::execute_control_for_duration(ParlPtr parl, const VectorXd &s,
     env_->register_ep_reward(total_seg_reward);
 }
 
-VectorXd Executor::execute_timestep(const VectorXd &c, ExperimentWriter &w) {
+VectorXd ErrorSpaceExecutor::execute_timestep(const VectorXd &c, ExperimentWriter &w) {
   write_executed_traj_line_(w, c);
 
   double env_reward;
@@ -130,11 +129,11 @@ VectorXd Executor::execute_timestep(const VectorXd &c, ExperimentWriter &w) {
   return new_state;
 }
 
-int Executor::get_overall_timestep() {
+int ErrorSpaceExecutor::get_overall_timestep() {
   return overall_timestep_;
 }
 
-VectorXd Executor::compute_error_state_(const VectorXd &ref, const VectorXd
+VectorXd ErrorSpaceExecutor::compute_error_state_(const VectorXd &ref, const VectorXd
     &actual, double time) {
   unsigned int state_dim = env_->get_state_space()->getDimension();
 
@@ -149,7 +148,7 @@ VectorXd Executor::compute_error_state_(const VectorXd &ref, const VectorXd
   return ret;
 }
 
-std::pair<VectorXd, VectorXd> Executor::compute_interpolated_error_state_(
+std::pair<VectorXd, VectorXd> ErrorSpaceExecutor::compute_interpolated_error_state_(
     double t, const VectorXd &s, const VectorXd &next_s, double time) {
   assert(0.0 <= t);
   assert(t <= 1.0);
@@ -160,7 +159,7 @@ std::pair<VectorXd, VectorXd> Executor::compute_interpolated_error_state_(
   return std::make_pair(interp_ref, error_state);
 }
 
-void Executor::write_executed_traj_line_(ExperimentWriter &w, const VectorXd& c) {
+void ErrorSpaceExecutor::write_executed_traj_line_(ExperimentWriter &w, const VectorXd& c) {
   assert(c.size() == env_->get_action_space()->getDimension());
 
   std::stringstream ss;
@@ -178,7 +177,7 @@ void Executor::write_executed_traj_line_(ExperimentWriter &w, const VectorXd& c)
   w.write_line("executed_traj", ss.str());
 }
 
-void Executor::write_planned_traj_line_(ExperimentWriter &w, const VectorXd&
+void ErrorSpaceExecutor::write_planned_traj_line_(ExperimentWriter &w, const VectorXd&
     interp_ref, const VectorXd& c) {
   assert(s.size() == env_->get_state_space()->getDimension());
   assert(c.size() == env_->get_action_space()->getDimension());
@@ -197,7 +196,7 @@ void Executor::write_planned_traj_line_(ExperimentWriter &w, const VectorXd&
   w.write_line("planned_traj", ss.str());
 }
 
-void Executor::write_distances_line_(ExperimentWriter &w, const VectorXd& s) {
+void ErrorSpaceExecutor::write_distances_line_(ExperimentWriter &w, const VectorXd& s) {
   assert(s.size() == env_->get_state_space()->getDimension());
 
   std::stringstream ss;

@@ -2,7 +2,7 @@ list(APPEND RESEARCH_SOURCES
   parl/parl.cpp
   parl/hyperparams.cpp
   parl/runner.cpp
-  parl_planning/executor.cpp
+  parl_planning/error_space_executor.cpp
   parl_planning/aggregate_model.cpp
   parl_planning/ompl_utils.cpp
   parl_planning/lqr_control_space.cpp

@@ -12,7 +12,7 @@
 #include <cannon/research/parl/envs/dynamic_car.hpp>
 #include <cannon/research/parl/hyperparams.hpp>
 #include <cannon/research/parl/parl.hpp>
-#include <cannon/research/parl_planning/executor.hpp>
+#include <cannon/research/parl_planning/error_space_executor.hpp>
 #include <cannon/research/parl_planning/aggregate_model.hpp>
 #include <cannon/research/parl_planning/lqr_control_space.hpp>
 #include <cannon/research/parl_planning/lqr_state_propagator.hpp>
@@ -25,9 +25,8 @@ using namespace cannon::utils;
 
 static Vector2d s_goal = Vector2d::Ones();
 
-
 // Whether to do learning
-static bool learn = false;
+static bool learn = true;
 static double tracking_threshold = 1.0;
 
 class DynamicCarProjector : public ob::ProjectionEvaluator
@@ -115,8 +114,67 @@ MatrixXd make_error_system_refs(oc::PathControl &path) {
   return refs;
 }
 
-oc::PathControl get_vector_control_path(const oc::PathControl& lqr_path) {
+oc::PathControl get_vector_control_path(std::shared_ptr<System> sys,
+                                        std::shared_ptr<LQRControlSpace> lqr_space,
+                                        oc::SpaceInformationPtr vector_si,
+                                        oc::PathControl &lqr_path,
+                                        double timestep) {
+  oc::PathControl ret_path(vector_si);
 
+  std::vector<ob::State *> states = lqr_path.getStates();
+  std::vector<oc::Control *> controls = lqr_path.getControls();
+  std::vector<double> durations = lqr_path.getControlDurations();
+  assert(durations.size() == controls.size());
+  assert(states.size() == controls.size() + 1);
+
+  ret_path.append(states[0]);
+  
+  for (unsigned int i = 0; i < controls.size(); i++) {
+    // TODO Compute vector controls for each time step
+    
+    auto lqr_control = static_cast<LQRControlSpace::ControlType*>(controls[i]);
+    auto cur_state = vector_si->allocState();
+    vector_si->copyState(cur_state, states[i]);
+    
+    double time = 0.0;
+    while (time < durations[i]) {
+
+      std::vector<double> vec_state(vector_si->getStateSpace()->getDimension());
+      vector_si->getStateSpace()->copyToReals(vec_state, cur_state);
+
+      // Compute vector control
+      VectorXd u(2);
+      lqr_space->compute_u_star(lqr_control, vec_state, u);
+
+      // TODO Step system, record in vec_state
+      oc::Control *computed_control = vector_si->getControlSpace()->allocControl();
+
+      computed_control->as<oc::RealVectorControlSpace::ControlType>()
+          ->values[0] = u[0];
+      computed_control->as<oc::RealVectorControlSpace::ControlType>()
+          ->values[1] = u[1];
+
+      std::vector<double> q(vector_si->getStateSpace()->getDimension()),
+          qdot(vector_si->getStateSpace()->getDimension());
+      vector_si->getStateSpace()->copyToReals(q, cur_state);
+      sys->ompl_ode_adaptor(q, computed_control, qdot);
+
+      for (unsigned int j = 0; j < vector_si->getStateSpace()->getDimension(); ++j) {
+        q[j] += qdot[j] * timestep;
+      }
+
+      ob::State* new_path_state = vector_si->allocState();
+      vector_si->getStateSpace()->copyFromReals(new_path_state, q);
+      vector_si->copyState(cur_state, new_path_state);
+
+      ret_path.append(new_path_state, computed_control, timestep);
+
+      time += timestep;
+    }
+  }
+  
+
+  return ret_path;
 }
 
 oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
@@ -194,7 +252,7 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
   ss.setGoal(std::make_shared<SubsetGoalRegion>(ss.getSpaceInformation(), geom_goal));
 
   // Necessary for discrete-time model
-  ss.getSpaceInformation()->setPropagationStepSize(env->get_time_step());
+  ss.getSpaceInformation()->setPropagationStepSize(env->get_time_step() * 10);
   log_info("Propagation step size is",
            ss.getSpaceInformation()->getPropagationStepSize());
 
@@ -207,17 +265,27 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
   double plan_time = 1.0;
   bool have_plan = false;
 
-  while (!have_plan && plan_time < 30.0) {
+  while (!have_plan && plan_time < 60.0) {
 
     log_info("Planning for", plan_time, "seconds");
     ob::PlannerStatus solved = ss.solve(plan_time);
     if (solved) {
       if (ss.haveExactSolutionPath()) {
         std::cout << "Found solution:" << std::endl;
-        ss.getSolutionPath().printAsMatrix(std::cout);
+        //ss.getSolutionPath().printAsMatrix(std::cout);
 
         // TODO Handle planned LQR controls 
-        return ss.getSolutionPath();
+        //return ss.getSolutionPath();
+
+        auto vector_si = std::make_shared<oc::SpaceInformation>(
+            env->get_state_space(), env->get_action_space());
+
+        log_info("Before converting to vector controls, path is");
+        ss.getSolutionPath().printAsMatrix(std::cout);
+
+        return get_vector_control_path(
+            sys, lqr_action_space, vector_si, ss.getSolutionPath(),
+            ss.getSpaceInformation()->getPropagationStepSize());
       } else {
         plan_time *= 2.0;
       }
@@ -258,7 +326,7 @@ void run_exp(ExperimentWriter &w, int seed) {
   auto env = std::make_shared<DynamicCarEnvironment>();
 
   // Planning for a different length of car
-  auto nominal_sys = std::make_shared<DynamicCarSystem>(0.1);
+  auto nominal_sys = std::make_shared<DynamicCarSystem>(1.0);
 
   VectorXd start = VectorXd::Zero(5);
   VectorXd goal = VectorXd::Zero(5);
@@ -282,13 +350,15 @@ void run_exp(ExperimentWriter &w, int seed) {
 
   // TODO Record closest approach to goal at each timestep up to max number of
   // timesteps
-  Executor executor(env, goal, tracking_threshold, learn);
+  ErrorSpaceExecutor executor(env, goal, tracking_threshold, learn);
 
   while ((env->get_state() - goal).norm() > 0.1 && executor.get_overall_timestep() < 1e3) {
     start = env->get_state();
     // auto path = plan_to_goal(nominal_sys, env, start, goal);
 
     auto path = plan_to_goal(planning_sys, env, start, goal);
+    path.printAsMatrix(std::cout);
+    log_info("Path has length", path.length());
     if (path.getControlCount() == 0) {
       log_info("No plan found");
       break;

@@ -29,11 +29,11 @@ namespace cannon {
 
       void noop_post_integration(const ob::State*, const oc::Control*, const double, ob::State*); 
 
-      class Executor {
+      class ErrorSpaceExecutor {
         public:
-          Executor() = delete;
+          ErrorSpaceExecutor() = delete;
 
-          Executor(EnvironmentPtr env, const VectorXd &goal,
+          ErrorSpaceExecutor(EnvironmentPtr env, const VectorXd &goal,
                    double tracking_threshold = 0.5, bool learn = false,
                    bool render = false)
               : tracking_threshold_(tracking_threshold), env_(env), goal_(goal),

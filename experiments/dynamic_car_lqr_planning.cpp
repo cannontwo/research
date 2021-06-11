@@ -239,8 +239,8 @@ int main() {
     std::cout << "Found solution:" << std::endl;
     ss.getSpaceInformation()->setPropagationStepSize(0.1);
     auto path(ss.getSolutionPath());
-    path.interpolate();
-    path.asGeometric().printAsMatrix(std::cout);
+    //path.interpolate();
+    path.printAsMatrix(std::cout);
   }
   else
     std::cout << "No solution found" << std::endl;
