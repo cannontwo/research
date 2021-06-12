@@ -41,6 +41,9 @@ void ErrorSpaceExecutor::execute_path( oc::PathControl &path, std::shared_ptr<Pa
       return;
     }
 
+    if (overall_timestep_ > max_overall_timestep_) 
+      return;
+
     Vector2d c = get_control_from_ompl_control(env_, controls[i]);
 
     // log_info("Executing control", c, "for", control_dur.count(),
@@ -52,7 +55,7 @@ void ErrorSpaceExecutor::execute_path( oc::PathControl &path, std::shared_ptr<Pa
   }
 
   log_info("Goal error on real system is",
-           (env_->get_state() - goal_).norm());
+           (env_->get_state().head(goal_.size()) - goal_).norm());
 }
 
 void ErrorSpaceExecutor::execute_control_for_duration(ParlPtr parl, const VectorXd &s,
@@ -65,6 +68,8 @@ void ErrorSpaceExecutor::execute_control_for_duration(ParlPtr parl, const Vector
   double cur_dur = 0.0;
   double total_seg_reward = 0.0;
   do {
+    log_info("Executing control for duration", env_->get_time_step(), "at overall timestep", overall_timestep_); 
+
     // Compute interpolated reference and error state
     VectorXd old_interp_ref, error_state;
     std::tie(old_interp_ref, error_state) = compute_interpolated_error_state_(
@@ -131,6 +136,10 @@ VectorXd ErrorSpaceExecutor::execute_timestep(const VectorXd &c, ExperimentWrite
 
 int ErrorSpaceExecutor::get_overall_timestep() {
   return overall_timestep_;
+}
+
+int ErrorSpaceExecutor::get_max_overall_timestep() {
+  return max_overall_timestep_;
 }
 
 VectorXd ErrorSpaceExecutor::compute_error_state_(const VectorXd &ref, const VectorXd
@@ -200,7 +209,7 @@ void ErrorSpaceExecutor::write_distances_line_(ExperimentWriter &w, const Vector
   assert(s.size() == env_->get_state_space()->getDimension());
 
   std::stringstream ss;
-  ss << overall_timestep_ << "," << (s - goal_).norm();
+  ss << overall_timestep_ << "," << (s.head(goal_.size()) - goal_).norm();
   w.write_line("distances", ss.str());
 }
 

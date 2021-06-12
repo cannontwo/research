@@ -212,8 +212,11 @@ VectorXu AggregateModel::get_grid_coords(const VectorXd& query) const {
   for (unsigned int i = 0; i < state_dim_; i++) {
     coords[i] = (unsigned int)floor((query[i] - bounds_(i, 0)) / cell_extent_[i]);
 
-    if (coords[i] >= grid_size_)
-      throw std::runtime_error("Passed query point outside state bounds");
+    if (coords[i] >= grid_size_) {
+      //log_info("Passed query point outside state bounds");
+      coords[i] = grid_size_;
+    }
+
   }
 
   return coords; 

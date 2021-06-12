@@ -26,7 +26,7 @@ using namespace cannon::utils;
 static Vector2d s_goal = Vector2d::Ones();
 
 // Whether to do learning
-static bool learn = true;
+static bool learn = false;
 static double tracking_threshold = 1.0;
 
 class DynamicCarProjector : public ob::ProjectionEvaluator
@@ -87,22 +87,24 @@ class SubsetGoalRegion : public ob::GoalRegion {
     Vector2d geom_goal_;
 };
 
-std::vector<double> get_ref_point_times(oc::PathControl &path) {
+std::vector<double> get_ref_point_times(oc::PathControl &path, unsigned int num_refs) {
   // Placing reference points halfway between each waypoint on the path
-  std::vector<double> durations = path.getControlDurations();
+  double total_duration = path.length();
   std::vector<double> points;
 
+  double duration_delta = total_duration / static_cast<double>(num_refs);
+
   double accumulated_dur = 0.0;
-  for (unsigned int i = 0; i < durations.size(); i++) {
-    points.push_back(accumulated_dur + (0.5 * durations[i]));
-    accumulated_dur += durations[i];
+  while (accumulated_dur < total_duration) {
+    points.push_back(accumulated_dur);
+    accumulated_dur += duration_delta;
   }
 
   return points;
 }
 
-MatrixXd make_error_system_refs(oc::PathControl &path) {
-  auto times = get_ref_point_times(path);
+MatrixXd make_error_system_refs(oc::PathControl &path, unsigned int num_refs=100) {
+  auto times = get_ref_point_times(path, num_refs);
 
   // Since this is the error system, all dimensions except for time should be
   // zero
@@ -133,43 +135,46 @@ oc::PathControl get_vector_control_path(std::shared_ptr<System> sys,
     // TODO Compute vector controls for each time step
     
     auto lqr_control = static_cast<LQRControlSpace::ControlType*>(controls[i]);
-    auto cur_state = vector_si->allocState();
-    vector_si->copyState(cur_state, states[i]);
+    
+    std::vector<double> prev_waypoint(vector_si->getStateSpace()->getDimension());
+    std::vector<double> next_waypoint(vector_si->getStateSpace()->getDimension());
+
+    vector_si->getStateSpace()->copyToReals(prev_waypoint, states[i]);
+    vector_si->getStateSpace()->copyToReals(next_waypoint, states[i+1]);
+
+    std::vector<double> cur_interp_waypoint(prev_waypoint);
     
     double time = 0.0;
     while (time < durations[i]) {
 
-      std::vector<double> vec_state(vector_si->getStateSpace()->getDimension());
-      vector_si->getStateSpace()->copyToReals(vec_state, cur_state);
+      // Compute next linearly interpolated state
+      double interp_param = (time + timestep) / durations[i];
+      std::vector<double> next_interp_waypoint(vector_si->getStateSpace()->getDimension());
+      for (unsigned int i = 0; i < vector_si->getStateSpace()->getDimension(); ++i) {
+        next_interp_waypoint[i] = prev_waypoint[i] + interp_param * (next_waypoint[i] - prev_waypoint[i]);
+      }
 
       // Compute vector control
       VectorXd u(2);
-      lqr_space->compute_u_star(lqr_control, vec_state, u);
+      lqr_space->compute_u_star(lqr_control, cur_interp_waypoint, u);
 
-      // TODO Step system, record in vec_state
+      // Copy to OMPL control
       oc::Control *computed_control = vector_si->getControlSpace()->allocControl();
-
       computed_control->as<oc::RealVectorControlSpace::ControlType>()
           ->values[0] = u[0];
       computed_control->as<oc::RealVectorControlSpace::ControlType>()
           ->values[1] = u[1];
 
-      std::vector<double> q(vector_si->getStateSpace()->getDimension()),
-          qdot(vector_si->getStateSpace()->getDimension());
-      vector_si->getStateSpace()->copyToReals(q, cur_state);
-      sys->ompl_ode_adaptor(q, computed_control, qdot);
-
-      for (unsigned int j = 0; j < vector_si->getStateSpace()->getDimension(); ++j) {
-        q[j] += qdot[j] * timestep;
-      }
-
+      // Append to path to be returned
       ob::State* new_path_state = vector_si->allocState();
-      vector_si->getStateSpace()->copyFromReals(new_path_state, q);
-      vector_si->copyState(cur_state, new_path_state);
-
+      vector_si->getStateSpace()->copyFromReals(new_path_state, next_interp_waypoint);
       ret_path.append(new_path_state, computed_control, timestep);
 
+      cur_interp_waypoint = next_interp_waypoint;
       time += timestep;
+
+      vector_si->getControlSpace()->freeControl(computed_control);
+      vector_si->getStateSpace()->freeState(new_path_state);
     }
   }
   
@@ -350,9 +355,11 @@ void run_exp(ExperimentWriter &w, int seed) {
 
   // TODO Record closest approach to goal at each timestep up to max number of
   // timesteps
-  ErrorSpaceExecutor executor(env, goal, tracking_threshold, learn);
+  ErrorSpaceExecutor executor(env, goal.head(2), tracking_threshold, learn);
 
-  while ((env->get_state() - goal).norm() > 0.1 && executor.get_overall_timestep() < 1e3) {
+  while ((env->get_state().head(2) - goal.head(2)).norm() > 0.1 &&
+         executor.get_overall_timestep() <
+             executor.get_max_overall_timestep()) {
     start = env->get_state();
     // auto path = plan_to_goal(nominal_sys, env, start, goal);
 
@@ -397,7 +404,7 @@ void run_exp(ExperimentWriter &w, int seed) {
 
   planning_sys->save(w.get_dir() + "/aggregate_model.h5");
 
-  if ((env->get_state() - goal).norm() < 0.1)
+  if ((env->get_state().head(2) - goal.head(2)).norm() < 0.1)
     log_info("Made it to goal!");
   else
     log_info("Maximum timesteps exceeded");

@@ -34,11 +34,14 @@ namespace cannon {
           ErrorSpaceExecutor() = delete;
 
           ErrorSpaceExecutor(EnvironmentPtr env, const VectorXd &goal,
-                   double tracking_threshold = 0.5, bool learn = false,
-                   bool render = false)
+                             double tracking_threshold = 0.5,
+                             bool learn = false, bool render = false,
+                             int max_overall_timestep = 1e4)
               : tracking_threshold_(tracking_threshold), env_(env), goal_(goal),
-                overall_timestep_(0), learn_(learn), render_(render) {
-            assert(goal_.size() == env_->get_state_space()->getDimension());
+                overall_timestep_(0),
+                max_overall_timestep_(max_overall_timestep), learn_(learn),
+                render_(render) {
+            assert(goal_.size() <= env_->get_state_space()->getDimension());
           }
 
           /*!
@@ -84,6 +87,13 @@ namespace cannon {
            * \returns Overall timestep.
            */
           int get_overall_timestep();
+
+          /*!
+           * \brief Get the maximum number of timesteps to execute.
+           *
+           * \returns Maximum overall timestep.
+           */
+          int get_max_overall_timestep();
 
         private:
 
@@ -135,6 +145,7 @@ namespace cannon {
           double tracking_threshold_; //!< Tracking threshold at which replanning is triggered
           VectorXd goal_; //!< Goal for plans
           int overall_timestep_; //!< Total number of timesteps executed in environment
+          int max_overall_timestep_; //!< Total number of timesteps executed in environment
 
           bool learn_; //!< Whether to execute learning
           bool render_; //!< Whether to render during execution

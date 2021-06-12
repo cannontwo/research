@@ -64,10 +64,7 @@ def make_traj_error_norm_df(run_dict):
     planned_df = pd.concat(run_dict["planned"])
     exec_df = pd.concat(run_dict["executed"])
 
-    planned_df.set_index("timestep", inplace=True)
-    exec_df.set_index("timestep", inplace=True)
-
-    diff_df = planned_df[["statex", "statey", "stateth"]] - exec_df[["statex", "statey", "stateth"]]
+    diff_df = planned_df[["statex", "statey", "stateth", "statev", "statedth"]] - exec_df[["statex", "statey", "stateth", "statev", "statedth"]]
     norm_df = diff_df.apply(compute_norm, axis=1)
 
     return norm_df
