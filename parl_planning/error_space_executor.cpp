@@ -216,10 +216,3 @@ void ErrorSpaceExecutor::write_distances_line_(ExperimentWriter &w, const Vector
   ss << overall_timestep_ << "," << (s.head(goal_.size()) - goal_).norm();
   w.write_line("distances", ss.str());
 }
-
-// Free Functions
-
-void cannon::research::parl::noop_post_integration(const ob::State*, const oc::Control*, 
-    const double, ob::State*) {
-  // This is a no-op
-}

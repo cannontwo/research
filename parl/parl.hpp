@@ -69,10 +69,21 @@ namespace cannon {
 
           MatrixXd get_refs();
           unsigned int get_nearest_ref_idx(const VectorXd& query);
-          MatrixXd get_B_matrix_idx_(int idx);
+
           MatrixXd get_A_matrix_idx_(int idx);
+          MatrixXd get_B_matrix_idx_(int idx);
+          VectorXd get_c_vector_idx_(int idx);
+
+          void set_dynamics_idx_(int idx, const Ref<const MatrixXd> &A,
+                                 const Ref<const MatrixXd> &B,
+                                 const Ref<const VectorXd> &c,
+                                 const Ref<const VectorXd> &in_mean);
+
           MatrixXd get_K_matrix_idx_(int idx);
+          void set_K_matrix_idx_(int idx, const Ref<const MatrixXd>& K);
+
           VectorXd get_k_vector_idx_(int idx);
+          void set_k_matrix_idx_(int idx, const Ref<const VectorXd>& k);
 
           std::vector<AutonomousLinearParams> get_controlled_system();
           std::vector<AutonomousLinearParams> get_min_sat_controlled_system();

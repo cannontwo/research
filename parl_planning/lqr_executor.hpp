@@ -21,17 +21,23 @@ namespace cannon {
     CANNON_CLASS_FORWARD(ExperimentWriter);
   }
 
+  namespace physics {
+    namespace systems {
+      CANNON_CLASS_FORWARD(System);
+    }
+  }
+
   namespace research {
     namespace parl {
 
       CANNON_CLASS_FORWARD(Parl);
       CANNON_CLASS_FORWARD(Environment);
 
-      class ErrorSpaceExecutor {
+      class LQRExecutor {
         public:
-          ErrorSpaceExecutor() = delete;
+          LQRExecutor() = delete;
 
-          ErrorSpaceExecutor(EnvironmentPtr env, const VectorXd &goal,
+          LQRExecutor(EnvironmentPtr env, const VectorXd &goal,
                              double tracking_threshold = 0.5,
                              bool learn = false, bool render = false,
                              int max_overall_timestep = 1e4)
@@ -45,39 +51,15 @@ namespace cannon {
           /*!
            * \brief Execute a path.
            *
+           * \param nominal_sys System path was planned for.
            * \param path The path to execute.
-           * \param parl Parl learner to optionally learn around the path
            * \param w ExperimentWriter for recording execution statistics
-           */
-          void execute_path(oc::PathControl &path, ParlPtr parl,
-                            utils::ExperimentWriter &w);
-
-          /*!
-           * \brief Execute a control in the environment for a given amount of time.
-           * 
-           * \param parl Parl learner responsible for learning from this execution
-           * \param s Previous waypoint
-           * \param next_s Next waypoint
-           * \param c Control to be applied
-           * \param start_time Time in execution of trajectory when control started
-           * \param control_dur Amount of time to execute control
-           * \param w ExperimentWriter for recording statistics
-           */
-          void execute_control_for_duration(ParlPtr parl, const VectorXd &s,
-                                            const VectorXd &next_s,
-                                            const VectorXd &c, double start_time,
-                                            double control_dur,
-                                            utils::ExperimentWriter &w);
-
-          /*!
-           * \brief Execute a single timestep of a control in this environment.
+           * \param seed Seed for random number generator during execution
            *
-           * \param c Control to execute this timestep
-           * \param w ExperimentWriter for recording statistics
-           *
-           * \returns Stepped environment state 
+           * \returns The PARL learner used to execute the path
            */
-          VectorXd execute_timestep(const VectorXd &c, utils::ExperimentWriter &w);
+          ParlPtr execute_path(physics::systems::SystemPtr nominal_sys, oc::PathControl &path,
+                               utils::ExperimentWriter &w, int seed);
 
           /*!
            * \brief Get the number of timesteps executed by this object.
@@ -96,32 +78,36 @@ namespace cannon {
         private:
 
           /*!
-           * \brief Create an error state representation of the input state
-           * with respect to a reference state.
+           * \brief Get state halfway along line between input waypoints.
            *
-           * \param ref Reference to compute error with respect to.
-           * \param actual Observed environment state.
-           * \param time Execution time, which will be incorporated into error state.
+           * \param w0 First waypoint
+           * \param w1 Second waypoint
            *
-           * \returns The error state
+           * \returns Interpolated waypoint
            */
-          VectorXd compute_error_state_(const VectorXd &ref, const VectorXd
-              &actual, double time);
+          VectorXd interp_waypoints(const Ref<const VectorXd>& w0, const Ref<const VectorXd>& w1);
 
           /*!
-           * \brief Compute interpolated reference point and corresponding
-           * error state for current environment state.
+           * \brief Make PARL references for executing input path by interpolating waypoints.
            *
-           * \param t Interpolation parameter
-           * \param s First waypoint
-           * \param next_s Next waypoint
-           * \param time Execution time
+           * \param path The path to create reference points along.
            *
-           * \returns A pair containing the interpolated reference point and
-           * error state for the current environment state.
+           * \returns References along path.
            */
-          std::pair<VectorXd, VectorXd> compute_interpolated_error_state_(
-              double t, const VectorXd &s, const VectorXd &next_s, double time);
+          MatrixXd make_path_refs(oc::PathControl& path);
+
+          /*!
+           * \brief Construct PARL agent for executing path. 
+           *
+           * \param nominal_sys System that path was planned for.
+           * \param path Path to construct PARL agent for.
+           * \param seed Random seed for PARL.
+           *
+           * \returns Initialized PARL agent.
+           */
+          ParlPtr
+          construct_parl_agent_for_path(physics::systems::SystemPtr nominal_sys,
+                                        oc::PathControl &path, int seed);
 
           /*!
            * \brief Write executed trajectory to file.

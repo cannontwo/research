@@ -392,6 +392,14 @@ MatrixXd Parl::get_B_matrix_(const VectorXd& state) {
   return theta.rightCols(action_dim_);
 }
 
+MatrixXd Parl::get_A_matrix_idx_(int idx) {
+  if (idx >= num_refs_)
+    throw std::runtime_error("Ref point index too large");
+
+  MatrixXd theta = dynamics_models_[idx].get_identified_mats().first;
+  return theta.leftCols(state_dim_);
+}
+
 MatrixXd Parl::get_B_matrix_idx_(int idx) {
   if (idx >= num_refs_)
     throw std::runtime_error("Ref point index too large");
@@ -400,12 +408,37 @@ MatrixXd Parl::get_B_matrix_idx_(int idx) {
   return theta.rightCols(action_dim_);
 }
 
-MatrixXd Parl::get_A_matrix_idx_(int idx) {
+VectorXd Parl::get_c_vector_idx_(int idx) {
   if (idx >= num_refs_)
     throw std::runtime_error("Ref point index too large");
 
-  MatrixXd theta = dynamics_models_[idx].get_identified_mats().first;
-  return theta.leftCols(state_dim_);
+  return dynamics_models_[idx].get_identified_mats().second;
+}
+
+void Parl::set_dynamics_idx_(int idx, const Ref<const MatrixXd> &A,
+                             const Ref<const MatrixXd> &B,
+                             const Ref<const VectorXd> &c,
+                             const Ref<const VectorXd>& in_mean) {
+  if (idx >= num_refs_)
+    throw std::runtime_error("Ref point index too large");
+
+  if (A.rows() != state_dim_ || A.cols() != state_dim_) 
+    throw std::runtime_error("A matrix had wrong dimensions");
+
+  if (B.rows() != state_dim_ || B.cols() != action_dim_) 
+    throw std::runtime_error("B matrix had wrong dimensions");
+
+  if (c.size() != state_dim_) 
+    throw std::runtime_error("c vector had wrong dimensions");
+
+  if (in_mean.size() != state_dim_ + action_dim_)
+    throw std::runtime_error("Feature mean had wrong dimensions");
+
+  MatrixXd theta(state_dim_ + action_dim_, action_dim_);
+  theta << A.transpose(), 
+           B.transpose();
+
+  dynamics_models_[idx].set_params(theta, c, in_mean);
 }
 
 MatrixXd Parl::get_K_matrix_idx_(int idx) {
@@ -415,11 +448,31 @@ MatrixXd Parl::get_K_matrix_idx_(int idx) {
   return controllers_[idx].get_mats().second;
 }
 
+void Parl::set_K_matrix_idx_(int idx, const Ref<const MatrixXd>& K) {
+  if (idx >= num_refs_)
+    throw std::runtime_error("Ref point index too large");
+
+  if (K.rows() != action_dim_ || K.cols() != state_dim_)
+    throw std::runtime_error("Control gain matrix was the wrong size");
+
+  controllers_[idx].set_K(K);
+}
+
 VectorXd Parl::get_k_vector_idx_(int idx) {
   if (idx >= num_refs_)
     throw std::runtime_error("Ref point index too large");
 
   return controllers_[idx].get_mats().first;
+}
+
+void Parl::set_k_matrix_idx_(int idx, const Ref<const VectorXd>& k) {
+  if (idx >= num_refs_)
+    throw std::runtime_error("Ref point index too large");
+
+  if (k.size() != action_dim_)
+    throw std::runtime_error("Control offset matrix was the wrong size");
+
+  controllers_[idx].set_k(k);
 }
 
 MatrixXd Parl::get_pred_covar_(const VectorXd& state) {
