@@ -89,8 +89,6 @@ std::tuple<MatrixXd, MatrixXd, VectorXd> AggregateModel::get_linearization(const
 void AggregateModel::get_continuous_time_linearization(const oc::ODESolver::StateType &q,
                                        Ref<MatrixXd> A, Ref<MatrixXd> B) {
 
-  // TODO This may need to be adjusted for timestep scaling so that the learned
-  // parts integrate correctly during planning
   nominal_model_->get_continuous_time_linearization(q, A, B);
 
   VectorXd x(q.size());
@@ -99,8 +97,13 @@ void AggregateModel::get_continuous_time_linearization(const oc::ODESolver::Stat
 
   LinearParams learned_params = get_local_model_for_state(x);
 
-  A += learned_params.A_ ;
-  B += learned_params.B_;
+  // Adjust for timestep scaling and crude discretization so that the learned
+  // parts integrate correctly during planning
+ 
+  // TODO Create some pathway so that this class can get timestep from somewhere
+  double timestep = 0.01;
+  A += (learned_params.A_ - MatrixXd::Identity(A.rows(), A.cols())) / timestep;
+  B += learned_params.B_ / timestep;
 }
 
 void AggregateModel::add_local_model(const RLSFilter& model, const VectorXd&

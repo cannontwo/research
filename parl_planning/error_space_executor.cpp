@@ -67,8 +67,9 @@ void ErrorSpaceExecutor::execute_control_for_duration(ParlPtr parl, const Vector
 
   double cur_dur = 0.0;
   double total_seg_reward = 0.0;
+  std::vector<VectorXd> states;
   do {
-    log_info("Executing control for duration", env_->get_time_step(), "at overall timestep", overall_timestep_); 
+    //log_info("Executing control for duration", env_->get_time_step(), "at overall timestep", overall_timestep_); 
 
     // Compute interpolated reference and error state
     VectorXd old_interp_ref, error_state;
@@ -103,10 +104,7 @@ void ErrorSpaceExecutor::execute_control_for_duration(ParlPtr parl, const Vector
     // Train PARL using error states
     if (learn_) {
       parl->process_datum(error_state, parl_c, reward, new_error_state, false);
-
-      // TODO Is this the correct way to do controller updates? Do we want to
-      // cache learned PARL controllers as well?
-      parl->value_grad_update_controller(error_state);
+      states.push_back(error_state);
     }
 
     total_seg_reward += reward;
@@ -115,6 +113,12 @@ void ErrorSpaceExecutor::execute_control_for_duration(ParlPtr parl, const Vector
     overall_timestep_++;
 
   } while (control_dur > cur_dur);
+
+  if (learn_) {
+    for (auto state : states) {
+      parl->value_grad_update_controller(state);
+    }
+  }
 
   // Plotting reward for an entire control segment
   if (render_)

@@ -222,6 +222,8 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
         ->values[1] = u[1];
 
     sys->ompl_ode_adaptor(q, computed_lqr_control, qdot);
+
+    env->get_action_space()->freeControl(computed_lqr_control);
   };
 
   auto linearizationFn = [&](const oc::ODESolver::StateType &q,
