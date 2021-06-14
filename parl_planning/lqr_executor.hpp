@@ -38,13 +38,14 @@ namespace cannon {
           LQRExecutor() = delete;
 
           LQRExecutor(EnvironmentPtr env, const VectorXd &goal,
-                             double tracking_threshold = 0.5,
-                             bool learn = false, bool render = false,
-                             int max_overall_timestep = 1e4)
+                      double tracking_threshold = 0.5, bool learn = false,
+                      bool render = false, int max_overall_timestep = 1e4,
+                      int controller_update_interval = 10)
               : tracking_threshold_(tracking_threshold), env_(env), goal_(goal),
                 overall_timestep_(0),
-                max_overall_timestep_(max_overall_timestep), learn_(learn),
-                render_(render) {
+                max_overall_timestep_(max_overall_timestep),
+                controller_update_interval_(controller_update_interval),
+                learn_(learn), render_(render) {
             assert(goal_.size() <= env_->get_state_space()->getDimension());
           }
 
@@ -130,6 +131,7 @@ namespace cannon {
           VectorXd goal_; //!< Goal for plans
           int overall_timestep_; //!< Total number of timesteps executed in environment
           int max_overall_timestep_; //!< Total number of timesteps executed in environment
+          int controller_update_interval_; //!< Step interval for controller updates when learning
 
           bool learn_; //!< Whether to execute learning
           bool render_; //!< Whether to render during execution

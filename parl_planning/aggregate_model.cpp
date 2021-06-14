@@ -98,12 +98,14 @@ void AggregateModel::get_continuous_time_linearization(const oc::ODESolver::Stat
   LinearParams learned_params = get_local_model_for_state(x);
 
   // Adjust for timestep scaling and crude discretization so that the learned
-  // parts integrate correctly during planning
- 
-  // TODO Create some pathway so that this class can get timestep from somewhere
-  double timestep = 0.01;
-  A += (learned_params.A_ - MatrixXd::Identity(A.rows(), A.cols())) / timestep;
-  B += learned_params.B_ / timestep;
+  // parts integrate correctly during planning. If we haven't seen any data in
+  // this region yet, don't adjust.
+  if (learned_params.num_data_ != 0) {
+    // TODO Create some pathway so that this class can get timestep from somewhere
+    double timestep = 0.01;
+    A += (learned_params.A_ - MatrixXd::Identity(A.rows(), A.cols())) / timestep;
+    B += learned_params.B_ / timestep;
+  }
 }
 
 void AggregateModel::add_local_model(const RLSFilter& model, const VectorXd&
@@ -203,6 +205,36 @@ void AggregateModel::process_path_parl(std::shared_ptr<Environment> env,
     add_local_model(local_model, waypoint, next_waypoint, c, tau, tau_delta);
   }
 
+}
+
+void AggregateModel::process_path_parl_lqr(std::shared_ptr<Parl> model) {
+  auto refs = model->get_refs();
+
+  for (unsigned int i = 0; i < refs.cols(); i++) {
+
+    // Only process models we actually got to
+    if (model->dynamics_models_[i].get_num_data() > 0) {
+      MatrixXd A, B;
+      VectorXd c;
+      std::tie(A, B, c) = nominal_model_->get_linearization(refs.col(i));
+
+      MatrixXd A_hat = model->get_A_matrix_idx_(i);
+      MatrixXd B_hat = model->get_B_matrix_idx_(i);
+      VectorXd c_hat = model->get_c_vector_idx_(i);
+
+      LinearParams tmp_param(A_hat - A, B_hat - B, c_hat - c, model->dynamics_models_[i].get_num_data());
+
+      VectorXu grid_coords = get_grid_coords(refs.col(i));
+      auto iter = parameters_.find(grid_coords);
+      if (iter != parameters_.end()) {
+        // There is already a LinearParams, so we merge
+        iter->second.merge(tmp_param);
+      } else {
+        // There is no existing LinearParams object for grid_coords
+        parameters_.insert({grid_coords, tmp_param});
+      }
+    }
+  }
 }
 
 VectorXu AggregateModel::get_grid_coords(const VectorXd& query) const {

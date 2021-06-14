@@ -6,6 +6,7 @@
 #include <ompl/control/SpaceInformation.h>
 #include <ompl/control/planners/sst/SST.h>
 #include <ompl/control/planners/rrt/RRT.h>
+#include <ompl/control/planners/kpiece/KPIECE1.h>
 #include <ompl/util/RandomNumbers.h>
 
 #include <cannon/physics/systems/dynamic_car.hpp>
@@ -116,72 +117,6 @@ MatrixXd make_error_system_refs(oc::PathControl &path, unsigned int num_refs=100
   return refs;
 }
 
-oc::PathControl get_vector_control_path(std::shared_ptr<System> sys,
-                                        std::shared_ptr<LQRControlSpace> lqr_space,
-                                        oc::SpaceInformationPtr vector_si,
-                                        oc::PathControl &lqr_path,
-                                        double timestep) {
-  oc::PathControl ret_path(vector_si);
-
-  std::vector<ob::State *> states = lqr_path.getStates();
-  std::vector<oc::Control *> controls = lqr_path.getControls();
-  std::vector<double> durations = lqr_path.getControlDurations();
-  assert(durations.size() == controls.size());
-  assert(states.size() == controls.size() + 1);
-
-  ret_path.append(states[0]);
-  
-  for (unsigned int i = 0; i < controls.size(); i++) {
-    // Compute vector controls for each time step
-    
-    auto lqr_control = static_cast<LQRControlSpace::ControlType*>(controls[i]);
-    
-    std::vector<double> prev_waypoint(vector_si->getStateSpace()->getDimension());
-    std::vector<double> next_waypoint(vector_si->getStateSpace()->getDimension());
-
-    vector_si->getStateSpace()->copyToReals(prev_waypoint, states[i]);
-    vector_si->getStateSpace()->copyToReals(next_waypoint, states[i+1]);
-
-    std::vector<double> cur_interp_waypoint(prev_waypoint);
-    
-    double time = 0.0;
-    while (time < durations[i]) {
-
-      // Compute next linearly interpolated state
-      double interp_param = (time + timestep) / durations[i];
-      std::vector<double> next_interp_waypoint(vector_si->getStateSpace()->getDimension());
-      for (unsigned int i = 0; i < vector_si->getStateSpace()->getDimension(); ++i) {
-        next_interp_waypoint[i] = prev_waypoint[i] + interp_param * (next_waypoint[i] - prev_waypoint[i]);
-      }
-
-      // Compute vector control
-      VectorXd u(2);
-      lqr_space->compute_u_star(lqr_control, cur_interp_waypoint, u);
-
-      // Copy to OMPL control
-      oc::Control *computed_control = vector_si->getControlSpace()->allocControl();
-      computed_control->as<oc::RealVectorControlSpace::ControlType>()
-          ->values[0] = u[0];
-      computed_control->as<oc::RealVectorControlSpace::ControlType>()
-          ->values[1] = u[1];
-
-      // Append to path to be returned
-      ob::State* new_path_state = vector_si->allocState();
-      vector_si->getStateSpace()->copyFromReals(new_path_state, next_interp_waypoint);
-      ret_path.append(new_path_state, computed_control, timestep);
-
-      cur_interp_waypoint = next_interp_waypoint;
-      time += timestep;
-
-      vector_si->getControlSpace()->freeControl(computed_control);
-      vector_si->getStateSpace()->freeState(new_path_state);
-    }
-  }
-  
-
-  return ret_path;
-}
-
 oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
                              std::shared_ptr<DynamicCarEnvironment> env,
                              VectorXd &start_state, VectorXd &goal_state) {
@@ -264,6 +199,7 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
            ss.getSpaceInformation()->getPropagationStepSize());
 
   //auto planner = std::make_shared<oc::SST>(ss.getSpaceInformation());
+  //auto planner = std::make_shared<oc::KPIECE1>(ss.getSpaceInformation());
   auto planner = std::make_shared<oc::RRT>(ss.getSpaceInformation());
   ss.setPlanner(planner);
   ss.setup();
@@ -284,15 +220,9 @@ oc::PathControl plan_to_goal(std::shared_ptr<System> sys,
         // TODO Handle planned LQR controls 
         //return ss.getSolutionPath();
 
-        auto vector_si = std::make_shared<oc::SpaceInformation>(
-            env->get_state_space(), env->get_action_space());
-
-        log_info("Before converting to vector controls, path is");
         ss.getSolutionPath().printAsMatrix(std::cout);
 
-        return get_vector_control_path(
-            sys, lqr_action_space, vector_si, ss.getSolutionPath(),
-            ss.getSpaceInformation()->getPropagationStepSize());
+        return ss.getSolutionPath();
       } else {
         plan_time *= 2.0;
       }
@@ -363,7 +293,6 @@ void run_exp(ExperimentWriter &w, int seed) {
          executor.get_overall_timestep() <
              executor.get_max_overall_timestep()) {
     start = env->get_state();
-    // auto path = plan_to_goal(nominal_sys, env, start, goal);
 
     auto path = plan_to_goal(planning_sys, env, start, goal);
     path.printAsMatrix(std::cout);
@@ -382,12 +311,12 @@ void run_exp(ExperimentWriter &w, int seed) {
     w.write_line("executed_traj",
                  "timestep,statex,statey,stateth,statev,statedth,controla,controlth");
 
-    auto parl = executor.execute_path(nominal_sys, path, w, seed);
+    auto parl = executor.execute_path(planning_sys, path, w, seed);
 
     // Update model used by planner to incorporate dynamics learned while
     // following this path.
     if (learn)
-      planning_sys->process_path_parl(env, parl, path);
+      planning_sys->process_path_parl_lqr(parl);
 
     // Compute and write AggregateModel overall linearization error
     double error = planning_sys->compute_model_error(env);

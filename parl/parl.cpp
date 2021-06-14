@@ -434,7 +434,7 @@ void Parl::set_dynamics_idx_(int idx, const Ref<const MatrixXd> &A,
   if (in_mean.size() != state_dim_ + action_dim_)
     throw std::runtime_error("Feature mean had wrong dimensions");
 
-  MatrixXd theta(state_dim_ + action_dim_, action_dim_);
+  MatrixXd theta(state_dim_ + action_dim_, state_dim_);
   theta << A.transpose(), 
            B.transpose();
 

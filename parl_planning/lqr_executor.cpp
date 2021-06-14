@@ -21,11 +21,21 @@ LQRExecutor::execute_path(std::shared_ptr<System> nominal_sys,
                           int seed) {
   auto parl = construct_parl_agent_for_path(nominal_sys, path, seed);
 
+  std::vector<ob::State *> path_states = path.getStates();
+  std::vector<double> durations = path.getControlDurations();
+
+  std::vector<VectorXd> update_states;
+
+  int path_index = 0;
+  double segment_exec_time = 0.0;
+  VectorXd from_waypoint = get_coords_from_ompl_state(env_, path_states[0]);
+  VectorXd to_waypoint = get_coords_from_ompl_state(env_, path_states[1]);
+
   // Execute PARL controller for max_overall_timesteps_ or until path diverges
   // enough from plan
   while (overall_timestep_ < max_overall_timestep_) {
     VectorXd state = env_->get_state();
-    VectorXd u = parl->get_action(state);
+    VectorXd u = parl->get_action(state, !learn_);
     write_executed_traj_line_(w, u);
 
     double env_reward;
@@ -35,18 +45,35 @@ LQRExecutor::execute_path(std::shared_ptr<System> nominal_sys,
 
     write_distances_line_(w, new_state);
 
-    // TODO Calculate interpolated waypoint
-    //write_planned_traj_line_(w, interp_waypoint, u);
+    // Calculate interpolated waypoint for the current time
+    double interp_param = segment_exec_time / durations[path_index];
+    VectorXd interp_waypoint = from_waypoint + interp_param * (to_waypoint - from_waypoint);
+    write_planned_traj_line_(w, interp_waypoint, u);
 
-    // TODO Calculate reward driving toward next waypoint (piecewise reward
-    // function along path)
-    double reward = 0.0;
+    // TODO How to compute path distance here? Frechet distance? Check against
+    // interpolated waypoints? Is there a better way to trigger replanning?
+    
+    double path_error = (new_state - interp_waypoint).norm();
+    //log_info("At environment timestep", overall_timestep_, "xy path error is", path_error);
+    if (path_error > tracking_threshold_) {
+      // TODO This implicitly assumes that there is no autonomous dynamical
+      // behavior; instead, a stopping maneuver should be executed before
+      // replanning (or, under different assumptions, replanning should be done
+      // for the predicted state after planning time).
+
+      log_info("Current state is", new_state, ", interpolated waypoint is",
+               interp_waypoint, ". Replanning at overall timestep",
+               overall_timestep_, "because tracking threshold exceeded");
+      return parl;
+    }
+
+    // Calculate reward driving toward next waypoint (piecewise reward
+    // function along path) and penalizing large controls
+    double reward = -(new_state - to_waypoint).norm() - u.norm();
 
     if (learn_) {
       parl->process_datum(state, u, reward, new_state, false);
-
-      // TODO Do controller updates on some interval instead
-      parl->value_grad_update_controller(state);
+      update_states.push_back(state);
     }
 
     if (render_) {
@@ -54,11 +81,32 @@ LQRExecutor::execute_path(std::shared_ptr<System> nominal_sys,
       env_->register_ep_reward(reward);
     }
 
-    // TODO How to compute path distance here? Frechet distance? Check against
-    // interpolated waypoints? When do we trigger replanning?
-
     overall_timestep_ += 1;
+    segment_exec_time += env_->get_time_step();
+
+    // Keep track of which segment of the path we should be on
+    if (segment_exec_time > durations[path_index]) {
+      ++path_index;
+      segment_exec_time = 0.0;
+
+      from_waypoint = to_waypoint;
+      to_waypoint = get_coords_from_ompl_state(env_, path_states[path_index + 1]);
+      
+      if (path_index >= durations.size()) {
+        log_info("Exhausted planned path, replanning");
+        return parl;
+      }
+    }
+
+    if (learn_ && update_states.size() >= controller_update_interval_) {
+      for (auto state : update_states) {
+        parl->value_grad_update_controller(state);
+      }
+      update_states.clear();
+    }
+
   }
+
 
   return parl;
 }
@@ -75,7 +123,9 @@ VectorXd LQRExecutor::interp_waypoints(const Ref<const VectorXd> &w0,
                                        const Ref<const VectorXd> &w1) {
   assert(w0.size() == env_->get_state_space()->getDimension());
   assert(w0.size() == w1.size());
-  return w0 + 0.5 * (w1 - w0);
+  VectorXd ret_vec = w0 + 0.5 * (w1 - w0);
+  assert(ret_vec.size() == w0.size());
+  return ret_vec;
 }
 
 MatrixXd LQRExecutor::make_path_refs(oc::PathControl& path) {
@@ -84,10 +134,11 @@ MatrixXd LQRExecutor::make_path_refs(oc::PathControl& path) {
                                  states.size() - 1);
 
   for (unsigned int i = 0; i < states.size() - 1; i++) {
-    auto w0 = get_coords_from_ompl_state(env_, states[i]);
-    auto w1 = get_coords_from_ompl_state(env_, states[i+1]);
+    VectorXd w0 = get_coords_from_ompl_state(env_, states[i]);
+    VectorXd w1 = get_coords_from_ompl_state(env_, states[i+1]);
 
-    refs.row(i) = interp_waypoints(w0, w1);
+    VectorXd v = interp_waypoints(w0, w1);
+    refs.col(i) = v;
   }
 
   return refs;
@@ -106,7 +157,8 @@ ParlPtr LQRExecutor::construct_parl_agent_for_path(
   params.load_config("/home/cannon/Documents/cannon/cannon/research/"
                      "experiments/parl_configs/r10c10_dc.yaml");
 
-  auto refs = make_path_refs(path);
+  MatrixXd refs = make_path_refs(path);
+  log_info("PARL refs matrix has dimensions", refs.rows(), "x", refs.cols());
   auto parl = std::make_shared<Parl>(
       env_->get_state_space(), env_->get_action_space(), refs, params, seed);
 
@@ -115,6 +167,7 @@ ParlPtr LQRExecutor::construct_parl_agent_for_path(
     auto lqr_control = static_cast<LQRControlSpace::ControlType*>(controls[i]);
     parl->set_K_matrix_idx_(i, -lqr_control->K);
     parl->set_k_matrix_idx_(i, lqr_control->K * lqr_control->q0);
+
     // TODO Also initialize number of datapoints contributing to controller?
 
     // Initialize PARL dynamics with environment linearization

@@ -72,8 +72,26 @@ namespace cannon {
               ref_state, const VectorXd& next_ref_state, 
               const VectorXd& ref_control, double tau, double tau_delta);
 
+          /*!
+           * \brief This is for processing a PARL agent operating in the error
+           * space around a path.
+           *
+           * \param env The environment in which the PARL agent was operating.
+           * \param model The learned PARL agent
+           * \param path The planned path
+           */
           void process_path_parl(EnvironmentPtr env,
               ParlPtr model, oc::PathControl& path);
+
+          /*!
+           * \brief This is for processing a PARL agent initialized from a
+           * series of LQR controllers along a path.
+           *
+           * \param env The environment in which the PARL agent was operating.
+           * \param model The learned PARL agent
+           * \param path The planned path
+           */
+          void process_path_parl_lqr(ParlPtr model);
 
           LinearParams get_local_model_for_state(const VectorXd& state);
 
