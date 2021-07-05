@@ -38,9 +38,7 @@ namespace cannon {
               : tracking_threshold_(tracking_threshold), env_(env), goal_(goal),
                 overall_timestep_(0),
                 max_overall_timestep_(max_overall_timestep), learn_(learn),
-                render_(render) {
-            assert(goal_.size() <= env_->get_state_space()->getDimension());
-          }
+                render_(render) {}
 
           /*!
            * \brief Execute a path.

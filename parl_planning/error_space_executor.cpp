@@ -192,7 +192,7 @@ void ErrorSpaceExecutor::write_executed_traj_line_(ExperimentWriter &w, const Ve
 
 void ErrorSpaceExecutor::write_planned_traj_line_(ExperimentWriter &w, const VectorXd&
     interp_ref, const VectorXd& c) {
-  assert(s.size() == env_->get_state_space()->getDimension());
+  assert(interp_ref.size() == env_->get_state_space()->getDimension());
   assert(c.size() == env_->get_action_space()->getDimension());
 
   std::stringstream ss;

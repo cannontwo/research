@@ -45,9 +45,7 @@ namespace cannon {
                 overall_timestep_(0),
                 max_overall_timestep_(max_overall_timestep),
                 controller_update_interval_(controller_update_interval),
-                learn_(learn), render_(render) {
-            assert(goal_.size() <= env_->get_state_space()->getDimension());
-          }
+                learn_(learn), render_(render) {}
 
           /*!
            * \brief Execute a path.
