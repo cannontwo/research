@@ -13,14 +13,14 @@ agent:
   use_adam: false
 
 experiment:
-  exp_id: refcolexps_r10c10_1
-  training_iterations: 1000
+  exp_id: r1c1_linear
+  training_iterations: 10000
   update_interval: 1
   test_interval: 10
   num_timesteps: 200
   num_tests: 10
-  env_name: "Pendulum-v0"
+  env_name: "LQR"
   use_grid_refs: true
-  ref_rows: 10
-  ref_cols: 10
+  ref_rows: 1
+  ref_cols: 1
   random_refs: 100
