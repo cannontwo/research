@@ -33,15 +33,15 @@ namespace cannon {
 
             state_space_ = std::make_shared<ob::RealVectorStateSpace>(state_dim_);
             ob::RealVectorBounds sb(state_dim_);
-            sb.setLow(-10.0);
-            sb.setHigh(10.0);
+            sb.setLow(-1.0);
+            sb.setHigh(1.0);
             state_space_->setBounds(sb);
             state_space_->setup();
 
             action_space_ = std::make_shared<oc::RealVectorControlSpace>(state_space_, control_dim_);
             ob::RealVectorBounds ab(control_dim_);
-            ab.setLow(-10.0);
-            ab.setHigh(10.0);
+            ab.setLow(-1.0);
+            ab.setHigh(1.0);
             action_space_->setBounds(ab);
             action_space_->setup();
 
@@ -68,10 +68,24 @@ namespace cannon {
           }
           
           virtual MatrixXd sample_grid_refs(int rows, int cols) const override {
-            assert(rows == 1);
-            assert(cols == 1);
+            MatrixXd refs(2, rows * cols);
 
-            return VectorXd::Zero(state_dim_);
+            VectorXd xs = VectorXd::LinSpaced(cols,
+                state_space_->getBounds().low[0],
+                state_space_->getBounds().high[0]);
+            VectorXd ys = VectorXd::LinSpaced(rows,
+                state_space_->getBounds().low[1],
+                state_space_->getBounds().high[1]);
+
+            for (int i = 0; i < rows; i++) {
+              for (int j = 0; j < cols; j++) {
+                int idx = (i * cols) + j;
+                refs(0, idx) = xs[j];
+                refs(1, idx) = ys[i];
+              }
+            }
+
+            return refs;
           }
 
           virtual std::tuple<VectorXd, double, bool> step(VectorXd control) override {
@@ -84,14 +98,23 @@ namespace cannon {
             double reward = -reward_mat(0, 0);
 
             VectorXd clipped_control(control);
-            clipped_control[0] = std::max(-10.0, std::min(clipped_control[0], 10.0));
+            clipped_control[0] = std::max(-1.0, std::min(clipped_control[0], 1.0));
 
-            state_ = state_ + (A_ * state_ + B_ * clipped_control + c_) * get_time_step();
+            auto old_state = state_;
+            state_ = A_ * state_ + B_ * clipped_control + c_;
 
-            state_[0] = std::max(-10.0, std::min(10.0, state_[0]));
-            state_[1] = std::max(-10.0, std::min(10.0, state_[1]));
+            log_info("Stepping from", old_state, "to", state_);
 
-            return std::make_tuple(state_, reward, false);
+            bool done = false;
+            if (state_[0] >= 1.0 || state_[0] <= -1.0 ||
+                state_[1] >= 1.0 || state_[1] <= -1.0) {
+              done = true;
+            }
+
+            state_[0] = std::max(-1.0, std::min(1.0, state_[0]));
+            state_[1] = std::max(-1.0, std::min(1.0, state_[1]));
+
+            return std::make_tuple(state_, reward, done);
           }
 
           virtual void render() override {

@@ -96,7 +96,13 @@ void Runner::do_initial_training_(int num_rollouts) {
       std::tie(new_state, reward, done) = env_->step(action);
 
       parl_->process_datum(state, action, reward, new_state);
-      state = new_state;
+
+      if (!done)
+        state = new_state;
+      else {
+        log_info("Ending episode after", j, "timesteps");
+        break;
+      }
     }
   }
 }
@@ -177,7 +183,13 @@ void Runner::run() {
       transitions_.push_back(std::make_pair(state, action));
       
       parl_->process_datum(state, action, reward, new_state, done);
-      state = new_state;
+
+      if (!done)
+        state = new_state;
+      else {
+        log_info("Ending episode after", j, "timesteps");
+        break;
+      }
     }
 
     env_->register_ep_reward(ep_reward);
