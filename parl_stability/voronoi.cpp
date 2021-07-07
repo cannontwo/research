@@ -52,7 +52,9 @@ cannon::research::parl::create_bounded_voronoi_polygons(const MatrixXd& refs, VD
         // TODO Clean up this unbounded polygon handling into separate function
         
         // State space bounds
-        Nef_polyhedron::Point p0(-M_PI, -8.0), p1(M_PI, -8.0), p2(M_PI, 8.0), p3(-M_PI, 8.0);
+        // TODO Make this state space bound handling not hard-coded
+        //Nef_polyhedron::Point p0(-M_PI, -8.0), p1(M_PI, -8.0), p2(M_PI, 8.0), p3(-M_PI, 8.0);
+        Nef_polyhedron::Point p0(-1.0, -1.0), p1(1.0, -1.0), p2(1.0, 1.0), p3(-1.0, 1.0);
         Nef_polyhedron::Point bound_rect[4] = {p0, p1, p2, p3};
         Nef_polyhedron bound_rect_nef_poly(bound_rect, bound_rect+4);
         Nef_polyhedron region_nef_poly(bound_rect_nef_poly);

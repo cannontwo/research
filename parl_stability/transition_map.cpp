@@ -210,14 +210,17 @@ cannon::research::parl::compute_parl_pwa_func(std::shared_ptr<Parl> parl, VD
     std::tie(linear_poly, min_sat_poly, max_sat_poly) = sat_voronoi_polygons[pair.first];
 
     if (min_sat_poly.size() != 0) {
+      log_info("Found min sat polygon");
       pwa_func.push_back(std::make_pair(min_sat_poly, min_sat_dynamics[i]));
     }
 
     if (max_sat_poly.size() != 0) {
+      log_info("Found max sat polygon");
       pwa_func.push_back(std::make_pair(max_sat_poly, max_sat_dynamics[i]));
     }
 
     if (linear_poly.size() != 0) {
+      log_info("Found linear regime polygon");
       pwa_func.push_back(std::make_pair(linear_poly, dynamics[i]));
     }
   }
@@ -278,7 +281,8 @@ std::tuple<Polygon_2, Polygon_2, Polygon_2>
 cannon::research::parl::get_saturated_polygons(const Polygon_2&
     voronoi_polygon, const RowVector2d& K, double k, double lower, double upper) {
 
-  if (K[0] == 0 && K[1] == 0) {
+  if (K[0] == 0 && K[1] == 0 && k == 0) {
+    log_info("Found degenerate controller");
     // Line is degenerate, and likely controller hasn't been updated at all
     Polygon_2 ret_poly;
     return std::make_tuple(ret_poly, ret_poly, ret_poly);
@@ -324,6 +328,10 @@ cannon::research::parl::get_saturated_polygons(const Polygon_2&
       Nef_polyhedron::Explorer e = diff.explorer();
       diff_poly = extract_finite_face_polygon(e);
     }
+  } else {
+    // Return entire Voronoi region as linear region
+    log_info("Upper saturated region and lower saturated region were empty");
+    diff_poly = extract_finite_face_polygon(voronoi_nef_poly.explorer());
   }
   
   return std::make_tuple(diff_poly, lower_intersection_poly, upper_intersection_poly);
