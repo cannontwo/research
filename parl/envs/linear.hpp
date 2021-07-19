@@ -103,8 +103,6 @@ namespace cannon {
             auto old_state = state_;
             state_ = A_ * state_ + B_ * clipped_control + c_;
 
-            log_info("Stepping from", old_state, "to", state_);
-
             bool done = false;
             if (state_[0] >= 1.0 || state_[0] <= -1.0 ||
                 state_[1] >= 1.0 || state_[1] <= -1.0) {

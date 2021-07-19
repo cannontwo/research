@@ -100,7 +100,6 @@ void Runner::do_initial_training_(int num_rollouts) {
       if (!done)
         state = new_state;
       else {
-        log_info("Ending episode after", j, "timesteps");
         break;
       }
     }
@@ -187,7 +186,6 @@ void Runner::run() {
       if (!done)
         state = new_state;
       else {
-        log_info("Ending episode after", j, "timesteps");
         break;
       }
     }

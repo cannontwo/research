@@ -1,4 +1,5 @@
 #include <cannon/research/parl_stability/transition_map.hpp>
+#include <GLFW/glfw3.h>
 
 using namespace cannon::research::parl;
 

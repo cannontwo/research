@@ -41,8 +41,31 @@ int main() {
 
   auto env = std::make_shared<LQREnvironment>(A, B, c, Q, R, VectorXd::Ones(2), VectorXd::Zero(2));
 
-  Runner r(env, "/home/cannon/Documents/cannon/cannon/research/experiments/parl_configs/r1c1_linear.yaml", false, true);
+  Runner r(env, "/home/cannon/Documents/cannon/cannon/research/experiments/parl_configs/r1c1_linear.yaml", false, false);
   r.run();
+
+  // Plot value function
+  auto parl = r.get_agent();
+  auto value_func = [&](const Vector2d& x) {
+    return parl->predict_value(x);
+  };
+
+  // Plot control function
+  auto control_func = [&](const Vector2d& x) {
+    return parl->get_action(x, true)(0, 0);
+  };
+
+  {
+  Plotter plotter;
+  plotter.plot(value_func, 10, -1.0, 1.0);
+  plotter.render();
+  }
+
+  {
+  Plotter plotter;
+  plotter.plot(control_func, 10, -1.0, 1.0);
+  plotter.render();
+  }
 
   auto controlled_system = r.get_agent()->get_controlled_system();
   auto diagram = compute_voronoi_diagram(r.get_agent()->get_refs());

@@ -26,7 +26,7 @@ LQRExecutor::execute_path(std::shared_ptr<System> nominal_sys,
 
   std::vector<VectorXd> update_states;
 
-  int path_index = 0;
+  unsigned int path_index = 0;
   double segment_exec_time = 0.0;
   VectorXd from_waypoint = get_coords_from_ompl_state(env_, path_states[0]);
   VectorXd to_waypoint = get_coords_from_ompl_state(env_, path_states[1]);

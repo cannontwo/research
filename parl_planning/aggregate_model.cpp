@@ -346,7 +346,7 @@ double AggregateModel::compute_model_error(std::shared_ptr<Environment> env) {
 
   for (auto& current_coords : cells) {
     VectorXd double_coords = VectorXd::Zero(state_dim_);
-    for (int i = 0; i < state_dim_; i++)
+    for (unsigned int i = 0; i < state_dim_; i++)
       double_coords[i] = current_coords[i];
 
     // Compute center of cell

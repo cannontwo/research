@@ -5,7 +5,9 @@
 #include <cannon/research/parl_stability/transition_map.hpp>
 #include <cannon/research/parl_stability/lyapunov_finding.hpp>
 
+#include <cannon/graphics/window.hpp>
 #include <cannon/plot/plotter.hpp>
+#include <cannon/plot/axes.hpp>
 
 using namespace cannon::plot;
 using namespace cannon::research::parl;
@@ -32,10 +34,10 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
   screen_coords[0] = normalized_x;
   screen_coords[1] = normalized_y;
 
-  Vector4f plot_coords = p->plotter.axes_.make_scaling_matrix().inverse() * screen_coords;
+  Vector4f plot_coords = p->plotter.axes_->make_scaling_matrix().inverse() * screen_coords;
 
-  double max_val = std::pow(p->plotter.axes_.x_max_, 2.0);
-  max_val += std::pow(p->plotter.axes_.y_max_, 2.0);
+  double max_val = std::pow(p->plotter.axes_->x_max_, 2.0);
+  max_val += std::pow(p->plotter.axes_->y_max_, 2.0);
   max_val = std::sqrt(max_val);
 
   double t = plot_coords.head(2).norm() / max_val;
@@ -75,9 +77,9 @@ int main(int argc, char** argv) {
 
   TrajPlotter p(pwa);
 
-  glfwSetWindowUserPointer(p.plotter.w_.get_gl_window(), &p);
-  glfwSetMouseButtonCallback(p.plotter.w_.get_gl_window(), mouse_button_callback);
-  glfwSetCursorPosCallback(p.plotter.w_.get_gl_window(), cursor_pos_callback);
+  glfwSetWindowUserPointer(p.plotter.w_->get_gl_window(), &p);
+  glfwSetMouseButtonCallback(p.plotter.w_->get_gl_window(), mouse_button_callback);
+  glfwSetCursorPosCallback(p.plotter.w_->get_gl_window(), cursor_pos_callback);
 
   p.plotter.render();
 }

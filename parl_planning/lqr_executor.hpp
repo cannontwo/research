@@ -41,7 +41,8 @@ namespace cannon {
                       double tracking_threshold = 0.5, bool learn = false,
                       bool render = false, int max_overall_timestep = 1e4,
                       int controller_update_interval = 10)
-              : tracking_threshold_(tracking_threshold), env_(env), goal_(goal),
+              : env_(env), goal_(goal),
+                tracking_threshold_(tracking_threshold), 
                 overall_timestep_(0),
                 max_overall_timestep_(max_overall_timestep),
                 controller_update_interval_(controller_update_interval),
@@ -129,7 +130,7 @@ namespace cannon {
           VectorXd goal_; //!< Goal for plans
           int overall_timestep_; //!< Total number of timesteps executed in environment
           int max_overall_timestep_; //!< Total number of timesteps executed in environment
-          int controller_update_interval_; //!< Step interval for controller updates when learning
+          unsigned int controller_update_interval_; //!< Step interval for controller updates when learning
 
           bool learn_; //!< Whether to execute learning
           bool render_; //!< Whether to render during execution

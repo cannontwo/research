@@ -125,8 +125,8 @@ namespace cannon {
 
           std::vector<RLSFilter> dynamics_models_;
           std::vector<AffineController> controllers_;
-          PiecewiseLSTDFilter value_model_;
-          //PiecewiseRecursiveLSTDFilter value_model_;
+          //PiecewiseLSTDFilter value_model_;
+          PiecewiseRecursiveLSTDFilter value_model_;
 
           geom::KDTreeIndexedPtr ref_tree_;
 
