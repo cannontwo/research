@@ -193,7 +193,7 @@ void AggregateModel::process_path_parl(std::shared_ptr<Environment> env,
     query[state_dim_] = accumulated_time;
     accumulated_time += 0.5 * durations[i];
 
-    unsigned int ref_idx = model->get_nearest_ref_idx(query);
+    unsigned int ref_idx = model->get_nearest_dynam_ref_idx(query);
     auto local_model = model->dynamics_models_[ref_idx];
     
     // Assuming that our data have mean that is halfway along this path
@@ -208,7 +208,7 @@ void AggregateModel::process_path_parl(std::shared_ptr<Environment> env,
 }
 
 void AggregateModel::process_path_parl_lqr(std::shared_ptr<Parl> model) {
-  auto refs = model->get_refs();
+  auto refs = model->get_dynam_refs();
 
   for (unsigned int i = 0; i < refs.cols(); i++) {
 

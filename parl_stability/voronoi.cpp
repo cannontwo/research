@@ -63,72 +63,75 @@ cannon::research::parl::create_bounded_voronoi_polygons(const MatrixXd& refs, VD
         auto nef_locate_result = region_nef_poly.locate(ref_point);
         assert(region_nef_poly.contains(nef_locate_result));
 
-        VD::Ccb_halfedge_circulator ec_start = (*fh)->ccb();
-        VD::Ccb_halfedge_circulator ec = ec_start;
+        // Segfault otherwise, as we have an unbounded face with no edges
+        if (refs.cols() > 1) {
+          VD::Ccb_halfedge_circulator ec_start = (*fh)->ccb();
+          VD::Ccb_halfedge_circulator ec = ec_start;
 
-        do {
-          // Iterate around unbounded face, intersecting each half-plane
-          // corresponding to an edge with polyhedron
-          if (ec->is_segment()) {
-            // Handle finite segment
-            assert(ec->has_source() && ec->has_target());
-            Nef_polyhedron::Point src(ec->source()->point().x(),
-                ec->source()->point().y());
-            Nef_polyhedron::Point tgt(ec->target()->point().x(),
-                ec->target()->point().y());
+          do {
+            // Iterate around unbounded face, intersecting each half-plane
+            // corresponding to an edge with polyhedron
+            if (ec->is_segment()) {
+              // Handle finite segment
+              assert(ec->has_source() && ec->has_target());
+              Nef_polyhedron::Point src(ec->source()->point().x(),
+                  ec->source()->point().y());
+              Nef_polyhedron::Point tgt(ec->target()->point().x(),
+                  ec->target()->point().y());
 
-            Nef_polyhedron::Line edge_line(src, tgt);
-            assert(edge_line.has_on_positive_side(ref_point));
+              Nef_polyhedron::Line edge_line(src, tgt);
+              assert(edge_line.has_on_positive_side(ref_point));
 
-            Nef_polyhedron halfplane(edge_line, Nef_polyhedron::INCLUDED);
+              Nef_polyhedron halfplane(edge_line, Nef_polyhedron::INCLUDED);
 
-            Nef_polyhedron tmp_intersection = region_nef_poly.intersection(halfplane);
-            assert(!tmp_intersection.is_empty());
+              Nef_polyhedron tmp_intersection = region_nef_poly.intersection(halfplane);
+              assert(!tmp_intersection.is_empty());
 
-            region_nef_poly = tmp_intersection;
+              region_nef_poly = tmp_intersection;
 
-            auto nef_locate_result = region_nef_poly.locate(ref_point);
-            assert(region_nef_poly.contains(nef_locate_result));
-          } else {
-            // Handle ray
-            VD::Delaunay_edge dual_edge = ec->dual();
-
-            // This is pretty jank, but might be the most parsimonious way to
-            // construct the ray
-            CGAL::Object ray_obj = diagram.dual().dual(dual_edge);  
-            const K::Ray_2 *ray = CGAL::object_cast<K::Ray_2>(&ray_obj);
-            assert(ray);
-
-            K::Direction_2 ray_dir = ray->direction();
-            K::Point_2 ray_src = ray->source();
-
-            Nef_polyhedron::Point src(ray_src.x(), ray_src.y());
-            Nef_polyhedron::Point tgt(ray_src.x() + ray_dir.dx(),
-                ray_src.y() + ray_dir.dy());
-
-            Nef_polyhedron::Line edge_line;
-            if (ec->has_source()) {
-              edge_line = Nef_polyhedron::Line(src, tgt);
-            } else if (ec->has_target()) {
-              edge_line = Nef_polyhedron::Line(tgt, src);
+              auto nef_locate_result = region_nef_poly.locate(ref_point);
+              assert(region_nef_poly.contains(nef_locate_result));
             } else {
-              throw std::runtime_error("We should not be here");
+              // Handle ray
+              VD::Delaunay_edge dual_edge = ec->dual();
+
+              // This is pretty jank, but might be the most parsimonious way to
+              // construct the ray
+              CGAL::Object ray_obj = diagram.dual().dual(dual_edge);  
+              const K::Ray_2 *ray = CGAL::object_cast<K::Ray_2>(&ray_obj);
+              assert(ray);
+
+              K::Direction_2 ray_dir = ray->direction();
+              K::Point_2 ray_src = ray->source();
+
+              Nef_polyhedron::Point src(ray_src.x(), ray_src.y());
+              Nef_polyhedron::Point tgt(ray_src.x() + ray_dir.dx(),
+                  ray_src.y() + ray_dir.dy());
+
+              Nef_polyhedron::Line edge_line;
+              if (ec->has_source()) {
+                edge_line = Nef_polyhedron::Line(src, tgt);
+              } else if (ec->has_target()) {
+                edge_line = Nef_polyhedron::Line(tgt, src);
+              } else {
+                throw std::runtime_error("We should not be here");
+              }
+
+              assert(edge_line.has_on_positive_side(ref_point));
+
+              Nef_polyhedron halfplane(edge_line, Nef_polyhedron::INCLUDED);
+
+              Nef_polyhedron tmp_intersection = region_nef_poly.intersection(halfplane);
+              assert(!tmp_intersection.is_empty());
+
+              region_nef_poly = tmp_intersection;
+
+              auto nef_locate_result = region_nef_poly.locate(ref_point);
+              assert(region_nef_poly.contains(nef_locate_result));
             }
 
-            assert(edge_line.has_on_positive_side(ref_point));
-
-            Nef_polyhedron halfplane(edge_line, Nef_polyhedron::INCLUDED);
-
-            Nef_polyhedron tmp_intersection = region_nef_poly.intersection(halfplane);
-            assert(!tmp_intersection.is_empty());
-
-            region_nef_poly = tmp_intersection;
-
-            auto nef_locate_result = region_nef_poly.locate(ref_point);
-            assert(region_nef_poly.contains(nef_locate_result));
-          }
-
-        } while (++ec != ec_start);
+          } while (++ec != ec_start);
+        }
 
         Polygon_2 polygon = extract_finite_face_polygon(region_nef_poly.explorer());
         assert(polygon.is_simple() && polygon.size() > 0);

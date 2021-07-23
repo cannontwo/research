@@ -183,7 +183,7 @@ cannon::research::parl::compute_parl_pwa_func(std::shared_ptr<Parl> parl, VD
 
   std::vector<std::pair<Polygon_2, AutonomousLinearParams>> pwa_func;
 
-  auto voronoi_polygons = create_bounded_voronoi_polygons(parl->get_refs(), diagram);
+  auto voronoi_polygons = create_bounded_voronoi_polygons(parl->get_dynam_refs(), diagram);
   log_info("Voronoi diagram has", voronoi_polygons.size(), "bounded polygons");
 
   std::map<unsigned int, std::tuple<Polygon_2, Polygon_2, Polygon_2>> sat_voronoi_polygons;

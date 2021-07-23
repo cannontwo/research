@@ -23,4 +23,7 @@ experiment:
   use_grid_refs: true
   ref_rows: 1
   ref_cols: 1
+  use_value_refs: true
+  value_ref_rows: 5
+  value_ref_cols: 5
   random_refs: 100

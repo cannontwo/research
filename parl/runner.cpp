@@ -46,10 +46,17 @@ Runner::Runner(EnvironmentPtr env, const std::string &config_filename,
   }
 # endif
 
+  MatrixXd value_refs;
+  if (use_value_refs)
+    value_refs = sample_value_refs_();
+  else
+    value_refs = refs;
+
+  // TODO Load separate value refs
   Hyperparams params;
   params.load_config(config_filename);
   parl_ = std::make_shared<Parl>(env_->get_state_space(),
-      env->get_action_space(), refs, params, 0, stability);
+      env->get_action_space(), refs, value_refs, params, 0, stability);
 
   env_->reset();
 
@@ -75,6 +82,18 @@ void Runner::load_config(const std::string& filename) {
   use_grid_refs = safe_get_param_<bool>(experiment_params, "use_grid_refs");
   ref_rows = safe_get_param_<int>(experiment_params, "ref_rows");
   ref_cols = safe_get_param_<int>(experiment_params, "ref_cols");
+
+  if (experiment_params["use_value_refs"]) {
+    use_value_refs = safe_get_param_<bool>(experiment_params, "use_value_refs");
+    value_ref_rows = safe_get_param_<int>(experiment_params, "value_ref_rows");
+    value_ref_cols = safe_get_param_<int>(experiment_params, "value_ref_cols");
+    log_info("Config has value refs with", value_ref_rows, "rows and", value_ref_cols, "columns");
+  } else {
+    use_value_refs = false;
+    value_ref_cols = 0;
+    value_ref_rows = 0;
+  }
+
   random_refs = safe_get_param_<int>(experiment_params, "random_refs");
 }
 
@@ -222,4 +241,8 @@ MatrixXd Runner::sample_refs_() {
     return env_->sample_grid_refs(ref_rows, ref_cols);
   else
     return env_->sample_random_refs(random_refs);
+}
+
+MatrixXd Runner::sample_value_refs_() {
+  return env_->sample_grid_refs(value_ref_rows, value_ref_cols);
 }

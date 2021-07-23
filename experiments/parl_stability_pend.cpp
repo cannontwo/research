@@ -31,7 +31,7 @@ int main() {
 
   // TODO Delete, just for debugging
   VectorXd query = VectorXd::Zero(2);
-  unsigned int zero_idx = r.get_agent()->get_nearest_ref_idx(query);
+  unsigned int zero_idx = r.get_agent()->get_nearest_dynam_ref_idx(query);
   auto zero_local_system = r.get_agent()->get_controlled_system()[zero_idx];
   auto zero_B = r.get_agent()->get_B_matrix_idx_(zero_idx);
   auto zero_k = r.get_agent()->get_k_vector_idx_(zero_idx);
@@ -44,7 +44,7 @@ int main() {
   log_info("Analytic controlled system has affine term", zero_B * analytic_k + zero_c, "\n");
 
   // Compute polytopal representation of Voronoi diagram of PARL refs
-  auto diagram = compute_voronoi_diagram(r.get_agent()->get_refs());
+  auto diagram = compute_voronoi_diagram(r.get_agent()->get_dynam_refs());
 
   // Create transition map using CGAL polygon affine mapping
   auto parl_pwa_func = compute_parl_pwa_func(r.get_agent(), diagram);

@@ -55,6 +55,11 @@ namespace cannon {
           bool use_grid_refs;
           int ref_rows;
           int ref_cols;
+
+          bool use_value_refs;
+          int value_ref_rows;
+          int value_ref_cols;
+
           int random_refs;
 
         private:
@@ -68,6 +73,7 @@ namespace cannon {
           }
 
           MatrixXd sample_refs_();
+          MatrixXd sample_value_refs_();
 
           void do_initial_training_(int num_rollouts = 100);
           void do_value_grad_update_();

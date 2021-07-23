@@ -14,13 +14,16 @@ agent:
 
 experiment:
   exp_id: refcolexps_r10c10_1
-  training_iterations: 1000
+  training_iterations: 100
   update_interval: 1
   test_interval: 10
   num_timesteps: 200
   num_tests: 10
   env_name: "Pendulum-v0"
   use_grid_refs: true
-  ref_rows: 10
-  ref_cols: 10
+  ref_rows: 2
+  ref_cols: 4
+  use_value_refs: true
+  value_ref_rows: 10
+  value_ref_cols: 10
   random_refs: 100

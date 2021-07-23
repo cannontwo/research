@@ -57,18 +57,18 @@ int main() {
 
   {
   Plotter plotter;
-  plotter.plot(value_func, 10, -1.0, 1.0);
+  plotter.plot(value_func, 10, -1.0, 1.0, -1.0, 1.0);
   plotter.render();
   }
 
   {
   Plotter plotter;
-  plotter.plot(control_func, 10, -1.0, 1.0);
+  plotter.plot(control_func, 10, -1.0, 1.0, -1.0, 1.0);
   plotter.render();
   }
 
   auto controlled_system = r.get_agent()->get_controlled_system();
-  auto diagram = compute_voronoi_diagram(r.get_agent()->get_refs());
+  auto diagram = compute_voronoi_diagram(r.get_agent()->get_dynam_refs());
   auto parl_pwa_func = compute_parl_pwa_func(r.get_agent(), diagram);
   save_pwa(parl_pwa_func, std::string("models/parl_lqr_pwa_") +
       std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())

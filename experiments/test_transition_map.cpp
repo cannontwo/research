@@ -61,7 +61,7 @@ int main() {
   log_info(controlled_system[0].A_);
 
   // Compute polytopal representation of Voronoi diagram of PARL refs
-  auto diagram = compute_voronoi_diagram(r.get_agent()->get_refs());
+  auto diagram = compute_voronoi_diagram(r.get_agent()->get_dynam_refs());
 
   // Create transition map using CGAL polygon affine mapping
   auto current_pwa = compute_parl_pwa_func(r.get_agent(), diagram);

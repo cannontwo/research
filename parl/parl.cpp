@@ -17,17 +17,25 @@ using namespace cannon::math;
 
 Parl::Parl(const std::shared_ptr<ob::StateSpace> state_space,
            const std::shared_ptr<oc::RealVectorControlSpace> action_space,
-           const MatrixXd &refs, Hyperparams params, int seed,
-           bool stability)
+           const MatrixXd &dynam_refs, const MatrixXd &value_refs,
+           Hyperparams params, int seed, bool stability)
     : state_dim_(state_space->getDimension()),
       action_dim_(action_space->getDimension()), state_space_(state_space),
-      action_space_(action_space), seed_(seed), refs_(refs), params_(params),
-      value_model_(state_dim_, refs.cols(), params.discount_factor),
-      ref_tree_(new KDTreeIndexed(state_dim_)), stability_(stability) {
+      action_space_(action_space), seed_(seed), dynam_refs_(dynam_refs),
+      value_refs_(value_refs), params_(params),
+      value_model_(state_dim_, value_refs.cols(), params.discount_factor),
+      dynam_ref_tree_(new KDTreeIndexed(state_dim_)),
+      value_ref_tree_(new KDTreeIndexed(state_dim_)), stability_(stability) {
 
-  if (refs_.rows() != state_dim_)
-    throw std::runtime_error("PARL reference points have the wrong dimension");
-  num_refs_ = refs_.cols();
+  if (dynam_refs_.rows() != state_dim_)
+    throw std::runtime_error("PARL dynamics reference points have the wrong dimension");
+  if (value_refs_.rows() != state_dim_)
+    throw std::runtime_error("PARL value reference points have the wrong dimension");
+
+  log_info("Value refs are", value_refs_);
+
+  num_dynam_refs_ = dynam_refs_.cols();
+  num_value_refs_ = value_refs_.cols();
 
   if (seed_ != 0) {
     // Set seed across all instances of multivariate normal distribution
@@ -38,10 +46,10 @@ Parl::Parl(const std::shared_ptr<ob::StateSpace> state_space,
     throw std::runtime_error("When using line search, learning rate should be 1");
   }
   
-  
-  ref_tree_->insert(refs_);
+  dynam_ref_tree_->insert(dynam_refs_);
+  value_ref_tree_->insert(value_refs_);
 
-  for (int i = 0; i < num_refs_; i++) {
+  for (int i = 0; i < num_dynam_refs_; i++) {
     // The dynamics models predict on (state, action) -> state
     dynamics_models_.emplace_back(state_dim_ + action_dim_,
         state_dim_, params_.alpha, params_.forgetting_factor);
@@ -57,10 +65,10 @@ Parl::Parl(const std::shared_ptr<ob::StateSpace> state_space,
 
   // Find indices of regions containing zero
   if (stability_) {
-    auto diagram = compute_voronoi_diagram(refs_);
-    auto polys = create_bounded_voronoi_polygons(refs_, diagram);
+    auto diagram = compute_voronoi_diagram(dynam_refs_);
+    auto polys = create_bounded_voronoi_polygons(dynam_refs_, diagram);
 
-    for (unsigned int i = 0; i < refs.size(); i++) {
+    for (unsigned int i = 0; i < dynam_refs.size(); i++) {
       if (is_inside(Vector2d::Zero(), polys[i])) {
         zero_ref_idxs_.push_back(i);
       }
@@ -68,7 +76,7 @@ Parl::Parl(const std::shared_ptr<ob::StateSpace> state_space,
 
     log_info("References whose Voronoi regions cover (0, 0):");
     for (auto idx : zero_ref_idxs_) {
-      log_info("\t (", idx, "):", refs.col(idx));
+      log_info("\t (", idx, "):", dynam_refs.col(idx));
     }
   }
 }
@@ -80,24 +88,26 @@ void Parl::process_datum(const VectorXd& state, const VectorXd& action,
   check_state_dim_(next_state);
   check_action_dim_(action);
 
-  int idx = ref_tree_->get_nearest_idx(state);
-  int next_idx = ref_tree_->get_nearest_idx(next_state);
+  int dynam_idx = dynam_ref_tree_->get_nearest_idx(state);
+  int dynam_next_idx = dynam_ref_tree_->get_nearest_idx(next_state);
+  int value_idx = value_ref_tree_->get_nearest_idx(state);
+  int value_next_idx = value_ref_tree_->get_nearest_idx(next_state);
 
   if (use_local) {
     VectorXd local_state = make_local_state_(state);
     VectorXd local_comb_vec = make_combined_vec_(local_state, action);
-    dynamics_models_[idx].process_datum(local_state, next_state);
+    dynamics_models_[dynam_idx].process_datum(local_state, next_state);
   } else {
     VectorXd comb_vec = make_combined_vec_(state, action);
-    dynamics_models_[idx].process_datum(comb_vec, next_state);
-    value_model_.process_datum(state, next_state, idx, next_idx, reward);
+    dynamics_models_[dynam_idx].process_datum(comb_vec, next_state);
+    value_model_.process_datum(state, next_state, value_idx, value_next_idx, reward);
   }
 }
 
 void Parl::value_grad_update_controller(const VectorXd& state) {
   check_state_dim_(state);
 
-  int idx = ref_tree_->get_nearest_idx(state);
+  int idx = dynam_ref_tree_->get_nearest_idx(state);
 
   VectorXd k_grad;
   MatrixXd K_grad;
@@ -127,11 +137,11 @@ void Parl::value_grad_update_controller(const VectorXd& state) {
 }
 
 VectorXd Parl::predict_next_state(const VectorXd& state, const VectorXd& action,
-    bool use_local) {
+    bool use_local) const {
   check_state_dim_(state);
   check_action_dim_(action);
 
-  int idx = ref_tree_->get_nearest_idx(state);
+  int idx = dynam_ref_tree_->get_nearest_idx(state);
   if (use_local) {
     VectorXd local_state = make_local_state_(state);
     VectorXd c = make_combined_vec_(local_state, action);
@@ -143,17 +153,17 @@ VectorXd Parl::predict_next_state(const VectorXd& state, const VectorXd& action,
   }
 }
 
-double Parl::predict_value(const VectorXd& state, bool use_local) {
+double Parl::predict_value(const VectorXd& state, bool use_local) const {
   check_state_dim_(state);
 
-  int idx = ref_tree_->get_nearest_idx(state); 
+  int idx = value_ref_tree_->get_nearest_idx(state); 
   if (use_local)
     throw std::runtime_error("Not implemented");
   else
     return value_model_.predict(state, idx);
 }
 
-VectorXd Parl::compute_value_gradient(const VectorXd& state) {
+VectorXd Parl::compute_value_gradient(const VectorXd& state) const {
   check_state_dim_(state);
   VectorXd v_x = get_V_matrix_(state);
   MatrixXd b = get_B_matrix_(state);
@@ -161,14 +171,14 @@ VectorXd Parl::compute_value_gradient(const VectorXd& state) {
   return b.transpose() * v_x;
 }
 
-VectorXd Parl::get_unconstrained_action(const VectorXd& state) {
+VectorXd Parl::get_unconstrained_action(const VectorXd& state) const {
   check_state_dim_(state);
 
-  int idx = ref_tree_->get_nearest_idx(state);
+  int idx = dynam_ref_tree_->get_nearest_idx(state);
   return controllers_[idx].get_action(state);
 }
 
-VectorXd Parl::get_action(const VectorXd& state, bool testing) {
+VectorXd Parl::get_action(const VectorXd& state, bool testing) const {
   check_state_dim_(state);
 
   VectorXd raw_action = get_unconstrained_action(state);
@@ -186,7 +196,7 @@ VectorXd Parl::get_action(const VectorXd& state, bool testing) {
     return raw_action + noise_part;
 }
 
-VectorXd Parl::simulated_step(const VectorXd& state, const VectorXd& action) {
+VectorXd Parl::simulated_step(const VectorXd& state, const VectorXd& action) const {
   check_state_dim_(state);
   check_action_dim_(action);
 
@@ -197,10 +207,10 @@ VectorXd Parl::simulated_step(const VectorXd& state, const VectorXd& action) {
   return pred_next_state + noise_dist.sample();
 }
 
-std::pair<VectorXd, MatrixXd> Parl::calculate_approx_value_gradient(const VectorXd& state) {
+std::pair<VectorXd, MatrixXd> Parl::calculate_approx_value_gradient(const VectorXd& state) const {
   check_state_dim_(state);
 
-  int idx = ref_tree_->get_nearest_idx(state);
+  int idx = dynam_ref_tree_->get_nearest_idx(state);
 
   MatrixXd A = get_A_matrix_idx_(idx);
   MatrixXd B = get_B_matrix_idx_(idx);
@@ -222,7 +232,7 @@ std::pair<VectorXd, MatrixXd> Parl::calculate_approx_value_gradient(const Vector
 
 std::pair<VectorXd, MatrixXd> Parl::line_search(const VectorXd& k_grad,
     const MatrixXd& K_grad, const VectorXd& state, const VectorXd& k,
-    const MatrixXd& K, double tau, double c) {
+    const MatrixXd& K, double tau, double c) const {
   check_state_dim_(state);
 
   // TODO (May want to abstract this to ml folder)
@@ -275,21 +285,32 @@ void Parl::save() {
   // TODO
 }
 
-MatrixXd Parl::get_refs() {
-  return refs_;
+const MatrixXd& Parl::get_dynam_refs() const {
+  return dynam_refs_;
 }
 
-unsigned int Parl::get_nearest_ref_idx(const VectorXd& query) {
+const MatrixXd& Parl::get_value_refs() const {
+  return value_refs_;
+}
+
+unsigned int Parl::get_nearest_dynam_ref_idx(const VectorXd& query) const {
   if (query.size() != state_dim_)
     throw std::runtime_error("Passed state had the wrong dimension");
   
-  return ref_tree_->get_nearest_idx(query);
+  return dynam_ref_tree_->get_nearest_idx(query);
 }
 
-std::vector<AutonomousLinearParams> Parl::get_controlled_system() {
+unsigned int Parl::get_nearest_value_ref_idx(const VectorXd& query) const {
+  if (query.size() != state_dim_)
+    throw std::runtime_error("Passed state had the wrong dimension");
+  
+  return value_ref_tree_->get_nearest_idx(query);
+}
+
+std::vector<AutonomousLinearParams> Parl::get_controlled_system() const {
   std::vector<AutonomousLinearParams> ret_vec;
 
-  for (unsigned int i = 0; i < num_refs_; i++) {
+  for (unsigned int i = 0; i < num_dynam_refs_; i++) {
     MatrixXd K;
     VectorXd k;
     std::tie(k, K) = controllers_[i].get_mats();
@@ -304,7 +325,7 @@ std::vector<AutonomousLinearParams> Parl::get_controlled_system() {
   return ret_vec;
 }
 
-std::vector<AutonomousLinearParams> Parl::get_min_sat_controlled_system() {
+std::vector<AutonomousLinearParams> Parl::get_min_sat_controlled_system() const {
   std::vector<AutonomousLinearParams> ret_vec;
 
   auto bounds = action_space_->getBounds();
@@ -313,7 +334,7 @@ std::vector<AutonomousLinearParams> Parl::get_min_sat_controlled_system() {
     min_sat_control[i] = bounds.low[i];
   }
 
-  for (unsigned int i = 0; i < num_refs_; i++) {
+  for (unsigned int i = 0; i < num_dynam_refs_; i++) {
     VectorXd c = dynamics_models_[i].get_identified_mats().second;
 
     MatrixXd controlled_A = get_A_matrix_idx_(i);
@@ -325,7 +346,7 @@ std::vector<AutonomousLinearParams> Parl::get_min_sat_controlled_system() {
   return ret_vec;
 }
 
-std::vector<AutonomousLinearParams> Parl::get_max_sat_controlled_system() {
+std::vector<AutonomousLinearParams> Parl::get_max_sat_controlled_system() const {
   std::vector<AutonomousLinearParams> ret_vec;
 
   auto bounds = action_space_->getBounds();
@@ -334,7 +355,7 @@ std::vector<AutonomousLinearParams> Parl::get_max_sat_controlled_system() {
     max_sat_control[i] = bounds.high[i];
   }
 
-  for (unsigned int i = 0; i < num_refs_; i++) {
+  for (unsigned int i = 0; i < num_dynam_refs_; i++) {
     VectorXd c = dynamics_models_[i].get_identified_mats().second;
 
     MatrixXd controlled_A = get_A_matrix_idx_(i);
@@ -347,7 +368,7 @@ std::vector<AutonomousLinearParams> Parl::get_max_sat_controlled_system() {
 }
 
 // Private methods
-VectorXd Parl::make_combined_vec_(const VectorXd& state, const VectorXd& action) {
+VectorXd Parl::make_combined_vec_(const VectorXd& state, const VectorXd& action) const {
   check_state_dim_(state);
   check_action_dim_(action);
 
@@ -358,15 +379,15 @@ VectorXd Parl::make_combined_vec_(const VectorXd& state, const VectorXd& action)
   return ret_vec;
 }
 
-VectorXd Parl::make_local_state_(const VectorXd& global_state) {
+VectorXd Parl::make_local_state_(const VectorXd& global_state) const {
   check_state_dim_(global_state);
 
-  VectorXd r = ref_tree_->get_nearest_neighbor(global_state).first;
+  VectorXd r = dynam_ref_tree_->get_nearest_neighbor(global_state).first;
   return global_state - r;
 }
 
 double Parl::calculate_td_target_(double reward, const VectorXd& next_state,
-    bool done, bool use_local) {
+    bool done, bool use_local) const {
   check_state_dim_(next_state);
 
   double next_value = predict_value(next_state, use_local);
@@ -377,39 +398,39 @@ double Parl::calculate_td_target_(double reward, const VectorXd& next_state,
     return reward + params_.discount_factor * next_value;
 }
 
-VectorXd Parl::get_V_matrix_(const VectorXd& state) {
+VectorXd Parl::get_V_matrix_(const VectorXd& state) const {
   check_state_dim_(state);
 
-  int idx = ref_tree_->get_nearest_idx(state); 
+  int idx = value_ref_tree_->get_nearest_idx(state); 
   return value_model_.get_mat(idx);
 }
 
-MatrixXd Parl::get_B_matrix_(const VectorXd& state) {
+MatrixXd Parl::get_B_matrix_(const VectorXd& state) const {
   check_state_dim_(state);
 
-  int idx = ref_tree_->get_nearest_idx(state);
+  int idx = dynam_ref_tree_->get_nearest_idx(state);
   MatrixXd theta = dynamics_models_[idx].get_identified_mats().first;
   return theta.rightCols(action_dim_);
 }
 
-MatrixXd Parl::get_A_matrix_idx_(int idx) {
-  if (idx >= num_refs_)
+MatrixXd Parl::get_A_matrix_idx_(int idx) const {
+  if (idx >= num_dynam_refs_)
     throw std::runtime_error("Ref point index too large");
 
   MatrixXd theta = dynamics_models_[idx].get_identified_mats().first;
   return theta.leftCols(state_dim_);
 }
 
-MatrixXd Parl::get_B_matrix_idx_(int idx) {
-  if (idx >= num_refs_)
+MatrixXd Parl::get_B_matrix_idx_(int idx) const {
+  if (idx >= num_dynam_refs_)
     throw std::runtime_error("Ref point index too large");
 
   MatrixXd theta = dynamics_models_[idx].get_identified_mats().first;
   return theta.rightCols(action_dim_);
 }
 
-VectorXd Parl::get_c_vector_idx_(int idx) {
-  if (idx >= num_refs_)
+VectorXd Parl::get_c_vector_idx_(int idx) const {
+  if (idx >= num_dynam_refs_)
     throw std::runtime_error("Ref point index too large");
 
   return dynamics_models_[idx].get_identified_mats().second;
@@ -419,7 +440,7 @@ void Parl::set_dynamics_idx_(int idx, const Ref<const MatrixXd> &A,
                              const Ref<const MatrixXd> &B,
                              const Ref<const VectorXd> &c,
                              const Ref<const VectorXd>& in_mean) {
-  if (idx >= num_refs_)
+  if (idx >= num_dynam_refs_)
     throw std::runtime_error("Ref point index too large");
 
   if (A.rows() != state_dim_ || A.cols() != state_dim_) 
@@ -441,15 +462,15 @@ void Parl::set_dynamics_idx_(int idx, const Ref<const MatrixXd> &A,
   dynamics_models_[idx].set_params(theta, c, in_mean);
 }
 
-MatrixXd Parl::get_K_matrix_idx_(int idx) {
-  if (idx >= num_refs_)
+MatrixXd Parl::get_K_matrix_idx_(int idx) const {
+  if (idx >= num_dynam_refs_)
     throw std::runtime_error("Ref point index too large");
 
   return controllers_[idx].get_mats().second;
 }
 
 void Parl::set_K_matrix_idx_(int idx, const Ref<const MatrixXd>& K) {
-  if (idx >= num_refs_)
+  if (idx >= num_dynam_refs_)
     throw std::runtime_error("Ref point index too large");
 
   if (K.rows() != action_dim_ || K.cols() != state_dim_)
@@ -458,15 +479,15 @@ void Parl::set_K_matrix_idx_(int idx, const Ref<const MatrixXd>& K) {
   controllers_[idx].set_K(K);
 }
 
-VectorXd Parl::get_k_vector_idx_(int idx) {
-  if (idx >= num_refs_)
+VectorXd Parl::get_k_vector_idx_(int idx) const {
+  if (idx >= num_dynam_refs_)
     throw std::runtime_error("Ref point index too large");
 
   return controllers_[idx].get_mats().first;
 }
 
 void Parl::set_k_matrix_idx_(int idx, const Ref<const VectorXd>& k) {
-  if (idx >= num_refs_)
+  if (idx >= num_dynam_refs_)
     throw std::runtime_error("Ref point index too large");
 
   if (k.size() != action_dim_)
@@ -475,10 +496,10 @@ void Parl::set_k_matrix_idx_(int idx, const Ref<const VectorXd>& k) {
   controllers_[idx].set_k(k);
 }
 
-MatrixXd Parl::get_pred_covar_(const VectorXd& state) {
+MatrixXd Parl::get_pred_covar_(const VectorXd& state) const {
   check_state_dim_(state);
 
-  int idx = ref_tree_->get_nearest_idx(state);
+  int idx = dynam_ref_tree_->get_nearest_idx(state);
   return dynamics_models_[idx].get_pred_error_covar();
 }
 
