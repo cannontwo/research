@@ -4,30 +4,40 @@
 #include <ompl/base/spaces/SO2StateSpace.h>
 #include <ompl/base/spaces/RealVectorStateSpace.h>
 
+#include <cannon/control/lqr.hpp>
 #include <cannon/research/parl/parl.hpp>
 #include <cannon/research/parl/runner.hpp>
 #include <cannon/research/parl/envs/linear.hpp>
 #include <cannon/research/parl_stability/voronoi.hpp>
 #include <cannon/research/parl_stability/transition_map.hpp>
 
+using namespace cannon::control;
 using namespace cannon::research::parl;
 
 int main() {
   Hyperparams params;
 
-  // For discrete-time system
   double timestep = 0.01;
 
   MatrixXd A(2, 2);
   A << 0, 15,
        3, 0;
-  A *= timestep;
-  A += MatrixXd::Identity(2, 2);
 
   MatrixXd B(2, 1);
   B << 0, 
        3;
 
+  auto lin_func = [A, B](const Ref<const VectorXd>&, Ref<MatrixXd> ret_A, Ref<MatrixXd> ret_B) {
+    ret_A = A;
+    ret_B = B;
+  };
+
+  LQRController controller(Vector2d::Zero(), 1, lin_func);
+  log_info("LQR controller is", controller.get_linear_gain());
+
+  // For discrete-time system
+  A *= timestep;
+  A += MatrixXd::Identity(2, 2);
   B *= timestep;
   
   VectorXd c(Vector2d::Zero());
@@ -41,7 +51,15 @@ int main() {
 
   auto env = std::make_shared<LQREnvironment>(A, B, c, Q, R, VectorXd::Ones(2), VectorXd::Zero(2));
 
-  Runner r(env, "/home/cannon/Documents/cannon/cannon/research/experiments/parl_configs/r1c1_linear.yaml", false, false);
+  auto initial_control_func = [&](const Ref<const VectorXd>& x) {
+    return controller.compute_control(x);
+  };
+
+  Runner r(env,
+           "/home/cannon/Documents/cannon/cannon/research/experiments/"
+           "parl_configs/r1c1_linear.yaml",
+           initial_control_func, false, false);
+
   r.run();
 
   // Plot value function
@@ -74,4 +92,6 @@ int main() {
       std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())
       + std::string(".h5"));
 
+  log_info("K is ", parl->get_K_matrix_idx_(0));
+  log_info("k is ", parl->get_k_vector_idx_(0));
 }

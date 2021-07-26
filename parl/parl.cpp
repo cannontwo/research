@@ -274,7 +274,13 @@ std::pair<VectorXd, MatrixXd> Parl::line_search(const VectorXd& k_grad,
     i += 1;
   }
 
-  return std::make_pair(ret_k_grad, ret_K_grad);
+  // If we exhausted the line search and didn't find anything, return zero gradient
+  if (i >= 15) {
+    return std::make_pair(VectorXd::Zero(ret_k_grad.size()),
+                          MatrixXd::Zero(ret_K_grad.rows(), ret_K_grad.cols()));
+  } else {
+    return std::make_pair(ret_k_grad, ret_K_grad);
+  }
 }
 
 void Parl::reset_value_model() {

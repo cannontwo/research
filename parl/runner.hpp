@@ -6,6 +6,7 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem> // C++17
+#include <functional>
 
 #include <yaml-cpp/yaml.h>
 #include <Eigen/Dense>
@@ -20,6 +21,8 @@ namespace cannon {
 
       CANNON_CLASS_FORWARD(Environment);
       CANNON_CLASS_FORWARD(Parl);
+
+      using ControlFunc = std::function<VectorXd(const Ref<const VectorXd>&)>;
 
       class Runner {
         public:
@@ -37,6 +40,13 @@ namespace cannon {
            */
           Runner(EnvironmentPtr env, const std::string&
               config_filename, bool render = false, bool stability = false);
+
+          /*!
+           * \brief Constructor taking environment, config filename, and initial controller.
+           */
+          Runner(EnvironmentPtr env, const std::string &config_filename,
+                 ControlFunc initial_controller, bool render = false,
+                 bool stability = false);
 
           void load_config(const std::string& filename);
           void run();
@@ -79,9 +89,9 @@ namespace cannon {
           void do_value_grad_update_();
           void do_tests_(int ep_num);
 
-
           EnvironmentPtr env_;
           ParlPtr parl_;
+          ControlFunc initial_controller_;
 
           std::vector<double> ep_rewards_;
           std::vector<double> test_rewards_;

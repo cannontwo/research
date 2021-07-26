@@ -40,8 +40,8 @@ namespace cannon {
 
             action_space_ = std::make_shared<oc::RealVectorControlSpace>(state_space_, control_dim_);
             ob::RealVectorBounds ab(control_dim_);
-            ab.setLow(-1.0);
-            ab.setHigh(1.0);
+            ab.setLow(-2.0);
+            ab.setHigh(2.0);
             action_space_->setBounds(ab);
             action_space_->setup();
 
@@ -98,7 +98,7 @@ namespace cannon {
             double reward = -reward_mat(0, 0);
 
             VectorXd clipped_control(control);
-            clipped_control[0] = std::max(-1.0, std::min(clipped_control[0], 1.0));
+            clipped_control[0] = std::max(-2.0, std::min(clipped_control[0], 2.0));
 
             auto old_state = state_;
             state_ = A_ * state_ + B_ * clipped_control + c_;

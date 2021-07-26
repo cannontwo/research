@@ -14,7 +14,7 @@ agent:
 
 experiment:
   exp_id: r1c1_linear
-  training_iterations: 1000
+  training_iterations: 20000
   update_interval: 1
   test_interval: 10
   num_timesteps: 200
@@ -24,6 +24,6 @@ experiment:
   ref_rows: 1
   ref_cols: 1
   use_value_refs: true
-  value_ref_rows: 5
-  value_ref_cols: 5
+  value_ref_rows: 3
+  value_ref_cols: 3
   random_refs: 100

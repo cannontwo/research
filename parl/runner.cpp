@@ -25,6 +25,16 @@ Runner::Runner(EnvironmentPtr env, std::shared_ptr<Parl> p,
 
   load_config(config_filename);
 
+  initial_controller_ = [&](const Ref<const VectorXd>& x) {
+    static int action_dim = env_->get_action_space()->getDimension();
+    static auto covar = MatrixXd::Identity(action_dim, action_dim);
+    static auto mean = VectorXd::Zero(action_dim);
+    static MultivariateNormal d(mean, covar);
+
+    VectorXd action = d.sample();
+    return action;
+  };
+
   env_->reset();
 }
 
@@ -34,6 +44,16 @@ Runner::Runner(EnvironmentPtr env, const std::string &config_filename,
 
   load_config(config_filename);
   MatrixXd refs = sample_refs_();
+
+  initial_controller_ = [&](const Ref<const VectorXd>& x) {
+    static int action_dim = env_->get_action_space()->getDimension();
+    static auto covar = MatrixXd::Identity(action_dim, action_dim);
+    static auto mean = VectorXd::Zero(action_dim);
+    static MultivariateNormal d(mean, covar);
+
+    VectorXd action = d.sample();
+    return action;
+  };
 
 # ifdef CANNON_BUILD_GRAPHICS
   if (refs.rows() == 2 && render_) {
@@ -59,7 +79,12 @@ Runner::Runner(EnvironmentPtr env, const std::string &config_filename,
       env->get_action_space(), refs, value_refs, params, 0, stability);
 
   env_->reset();
+}
 
+Runner::Runner(EnvironmentPtr env, const std::string &config_filename,
+               ControlFunc initial_controller, bool render, bool stability)
+    : Runner(env, config_filename, render, stability) {
+  initial_controller_ = initial_controller;
 }
 
 void Runner::load_config(const std::string& filename) {
@@ -108,10 +133,7 @@ void Runner::do_initial_training_(int num_rollouts) {
       double reward;
       bool done;
 
-      int action_dim = env_->get_action_space()->getDimension();
-      MultivariateNormal d(MatrixXd::Identity(action_dim, action_dim));
-
-      VectorXd action = d.sample();
+      VectorXd action = initial_controller_(state);
       std::tie(new_state, reward, done) = env_->step(action);
 
       parl_->process_datum(state, action, reward, new_state);
@@ -155,6 +177,9 @@ void Runner::do_tests_(int ep_num) {
       test_reward += reward;
 
       state = new_state;
+
+      // During testing we don't break on done in order to get consistent test
+      // rewards
     }
 
     test_reward_file_ << std::to_string(ep_num) << "," <<
@@ -225,6 +250,10 @@ void Runner::run() {
       do_tests_(i);
     }
   }
+
+  Plotter plotter;
+  plotter.plot(test_rewards_);
+  plotter.render();
 }
 
 std::shared_ptr<Parl> Runner::get_agent() {
