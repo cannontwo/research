@@ -58,7 +58,7 @@ Parl::Parl(const std::shared_ptr<ob::StateSpace> state_space,
         params_.controller_learning_rate, params_.use_adam);
 
     // Checking KDT construction
-    assert(ref_tree_->get_nearest_idx(refs_.col(i)) == i);
+    assert(dynam_ref_tree_->get_nearest_idx(dynam_refs_.col(i)) == i);
   }
 
   VectorXd zero_vec = VectorXd::Zero(state_dim_);

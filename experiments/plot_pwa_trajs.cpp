@@ -8,6 +8,7 @@
 #include <cannon/graphics/window.hpp>
 #include <cannon/plot/plotter.hpp>
 #include <cannon/plot/axes.hpp>
+#include <cannon/plot/scatter.hpp>
 
 using namespace cannon::plot;
 using namespace cannon::research::parl;
@@ -36,11 +37,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
   Vector4f plot_coords = p->plotter.axes_->make_scaling_matrix().inverse() * screen_coords;
 
-  double max_val = std::pow(p->plotter.axes_->x_max_, 2.0);
-  max_val += std::pow(p->plotter.axes_->y_max_, 2.0);
-  max_val = std::sqrt(max_val);
-
-  double t = plot_coords.head(2).norm() / max_val;
+  double t = (std::atan2(plot_coords[1], plot_coords[0]) + M_PI) / (2*M_PI);
 
   Vector3d rgb = tinycolormap::GetColor(t, tinycolormap::ColormapType::Viridis).ConvertToEigen();
   Vector4f point_value_color = Vector4f::Ones();
@@ -51,10 +48,11 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
   Vector2d state;
   state[0] = plot_coords[0];
   state[1] = plot_coords[1];
+  auto scatter = p->plotter.plot_points(state.cast<float>().transpose(), point_value_color);
   for (unsigned int i = 0; i < 200; i++) {
     try {
     Vector2d next_state = evaluate_pwa(p->pwa, state);
-    p->plotter.plot_points(state.cast<float>().transpose(), point_value_color);
+    scatter->add_points(next_state.cast<float>().transpose());
     state = next_state;
     } catch (...) {
       break;
