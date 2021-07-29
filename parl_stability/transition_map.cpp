@@ -350,7 +350,15 @@ void cannon::research::parl::plot_transition_map(const std::pair<TransitionMap, 
     color.head(3) = rgb;
     for (auto const& poly : pair.second) {
       //p.plot_polygon(poly, color);
-      p.plot_polygon(poly, generate_random_color());
+      std::vector<Vector2d> plot_poly;
+      for (auto it = poly.vertices_begin(); it != poly.vertices_end(); ++it) {
+        Vector2d vert;
+        vert << CGAL::to_double(it->x()),
+                CGAL::to_double(it->y());
+        plot_poly.push_back(vert);
+      }
+
+      p.plot_polygon(plot_poly, generate_random_color());
     }
   }
 
@@ -362,7 +370,14 @@ void cannon::research::parl::plot_transition_map(const std::pair<TransitionMap, 
     color.head(3) = rgb;
     for (auto const& poly : pair.second) {
       //p.plot_polygon(poly, color);
-      p.plot_polygon(poly, generate_random_color(0.75, 0.25));
+      std::vector<Vector2d> plot_poly;
+      for (auto it = poly.vertices_begin(); it != poly.vertices_end(); ++it) {
+        Vector2d vert;
+        vert << CGAL::to_double(it->x()),
+                CGAL::to_double(it->y());
+        plot_poly.push_back(vert);
+      }
+      p.plot_polygon(plot_poly, generate_random_color(0.75, 0.25));
     }
   }
   

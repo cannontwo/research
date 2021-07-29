@@ -54,8 +54,16 @@ int main(int argc, char** argv) {
       i++;
     }
 
-    if (!all_above) 
-      p.plot_polygon(component.poly_, colors);
+    if (!all_above)  {
+      std::vector<Vector2d> plot_poly;
+      for (auto it = component.poly_.vertices_begin(); it != component.poly_.vertices_end(); ++it) {
+        Vector2d vert;
+        vert << CGAL::to_double(it->x()),
+                CGAL::to_double(it->y());
+        plot_poly.push_back(vert);
+      }
+      p.plot_polygon(plot_poly, colors);
+    }
 
     processed++;
 
