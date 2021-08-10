@@ -35,10 +35,49 @@ int main() {
   LQRController controller(Vector2d::Zero(), 1, lin_func);
   log_info("LQR controller is", controller.get_linear_gain());
 
-  // For discrete-time system
+
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_real_distribution<double> dis(-5.0, 5.0);
+  MatrixXd random_matrix = MatrixXd::NullaryExpr(2, 2, [&](){return dis(gen);});
+
+
+  MatrixXd A_delta = random_matrix;
+  //A_delta << 0, 2, 
+  //           -2, 0;
+
+  MatrixXd B_delta(2, 1);
+  B_delta << 0,
+             0;
+
+  // For discrete-time system, with slight model change
+  A += A_delta;
   A *= timestep;
   A += MatrixXd::Identity(2, 2);
+
+  log_info("True system A is", A);
+
+  B += B_delta;
   B *= timestep;
+
+  log_info("True system B is", B);
+
+  MatrixXd controlled_A = A + (B * controller.get_linear_gain());
+  VectorXcd eigenvalues = controlled_A.eigenvalues();
+  bool stable = true;
+  for (unsigned int i = 0; i < eigenvalues.size(); ++i) {
+    if (std::abs(eigenvalues[i]) > 1.0)
+      stable = false;
+  }
+
+  if (stable)
+    log_info("LQR-controlled real system is stable");
+  else
+    log_info("LQR-controlled real system is NOT stable");
+
+
+  log_info("LQR-controlled system matrix is",  A + (B * controller.get_linear_gain()));
+  log_info("LQR-controlled system has eigenvalues", eigenvalues);
   
   VectorXd c(Vector2d::Zero());
 
@@ -94,4 +133,21 @@ int main() {
 
   log_info("K is ", parl->get_K_matrix_idx_(0));
   log_info("k is ", parl->get_k_vector_idx_(0));
+
+  MatrixXd parl_controlled_A = A + (B * parl->get_K_matrix_idx_(0));
+  VectorXcd parl_eigenvalues = parl_controlled_A.eigenvalues();
+  bool parl_stable = true;
+  for (unsigned int i = 0; i < parl_eigenvalues.size(); ++i) {
+    if (std::abs(parl_eigenvalues[i]) > 1.0)
+      parl_stable = false;
+  }
+
+  if (parl_stable)
+    log_info("PARL-controlled real system is stable");
+  else
+    log_info("PARL-controlled real system is NOT stable");
+
+
+  log_info("PARL-controlled system matrix is",  parl_controlled_A);
+  log_info("PARL-controlled system has eigenvalues", parl_eigenvalues);
 }

@@ -14,7 +14,7 @@ agent:
 
 experiment:
   exp_id: r1c1_linear
-  training_iterations: 20000
+  training_iterations: 2000
   update_interval: 1
   test_interval: 10
   num_timesteps: 200

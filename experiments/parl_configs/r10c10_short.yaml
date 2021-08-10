@@ -21,8 +21,8 @@ experiment:
   num_tests: 10
   env_name: "Pendulum-v0"
   use_grid_refs: true
-  ref_rows: 2
-  ref_cols: 4
+  ref_rows: 10
+  ref_cols: 10
   use_value_refs: true
   value_ref_rows: 10
   value_ref_cols: 10
