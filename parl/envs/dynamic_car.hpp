@@ -59,10 +59,10 @@ namespace cannon {
 
             action_space_ = std::make_shared<oc::RealVectorControlSpace>(state_space_, 2);
             ob::RealVectorBounds ab(2);
-            ab.setLow(0, -0.5);
-            ab.setLow(1, -M_PI * 2.0 / 180.0);
-            ab.setHigh(0, 0.5);
-            ab.setHigh(1, M_PI * 2.0 / 180.0);
+            ab.setLow(0, -2.0);
+            ab.setLow(1, -M_PI);
+            ab.setHigh(0, 2.0);
+            ab.setHigh(1, M_PI);
             action_space_->setBounds(ab);
             action_space_->setup();
 
@@ -89,19 +89,19 @@ namespace cannon {
             MatrixXd refs(5, rows * cols);
 
             VectorXd xs = VectorXd::LinSpaced(cols,
-                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().low[0],
-                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().high[0]);
+                state_space_->getSubspace(1)->as<ob::RealVectorStateSpace>()->getBounds().low[0],
+                state_space_->getSubspace(1)->as<ob::RealVectorStateSpace>()->getBounds().high[0]);
             VectorXd ys = VectorXd::LinSpaced(rows,
-                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().low[1],
-                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().high[1]);
+                state_space_->getSubspace(1)->as<ob::RealVectorStateSpace>()->getBounds().low[1],
+                state_space_->getSubspace(1)->as<ob::RealVectorStateSpace>()->getBounds().high[1]);
 
             for (int i = 0; i < rows; i++) {
               for (int j = 0; j < cols; j++) {
                 int idx = (i * cols) + j;
-                refs(0, idx) = xs[j];
-                refs(1, idx) = ys[i];
-                refs(2, idx) = 0.0;
-                refs(3, idx) = 0.0;
+                refs(0, idx) = 0.0;
+                refs(1, idx) = 0.0;
+                refs(2, idx) = xs[i];
+                refs(3, idx) = ys[i];
                 refs(4, idx) = 0.0;
               }
             }
@@ -123,6 +123,8 @@ namespace cannon {
             state_[2] = std::atan2(std::sin(state_[2]), std::cos(state_[2]));
             state_[3] = std::max(-1.0, std::min(1.0, state_[3]));
             state_[4] = std::max(-M_PI * 30 / 180.0, std::min(M_PI * 30 / 180.0, state_[4]));
+
+            kc_.reset(state_);
 
             return std::make_tuple(state_, reward, false);
           }
@@ -281,7 +283,7 @@ namespace cannon {
                     pos[2] = y;
                     car_model->set_pos(pos);
 
-                    AngleAxisf rot(th - (M_PI / 2.0), Vector3f::UnitY());
+                    AngleAxisf rot(-th + (M_PI / 2.0), Vector3f::UnitY());
                     car_model->set_rot(rot);
                     
                     });

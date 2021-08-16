@@ -13,7 +13,7 @@ agent:
   use_clipping: true
   use_line_search: true
   clip_line_search: false
-  use_adam: true
+  use_adam: false
 
 experiment:
   exp_id: refcolexps_r10c10_1
@@ -23,7 +23,7 @@ experiment:
   num_timesteps: 200
   num_tests: 10
   env_name: "Dynamic Car"
-  use_grid_refs: false
+  use_grid_refs: true
   ref_rows: 10
   ref_cols: 10
   random_refs: 100
