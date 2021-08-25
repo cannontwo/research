@@ -287,7 +287,7 @@ void run_exp(ExperimentWriter &w, int seed) {
 
   // TODO Record closest approach to goal at each timestep up to max number of
   // timesteps
-  LQRExecutor executor(env, goal.head(2), tracking_threshold, learn);
+  LQRExecutor executor(env, goal.head(2), tracking_threshold, learn, true);
 
   while ((env->get_state().head(2) - goal.head(2)).norm() > 0.1 &&
          executor.get_overall_timestep() <

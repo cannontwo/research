@@ -30,10 +30,9 @@ namespace cannon {
 
       class DynamicCarEnvironment : public Environment {
         public:
-
-          DynamicCarEnvironment(const VectorXd& s = VectorXd::Zero(5), const
-              VectorXd& g = VectorXd::Ones(5)) : kc_(s, g), state_(5), start_(s), goal_(g)
-          {
+          DynamicCarEnvironment(const Ref<const VectorXd> &s = VectorXd::Zero(5),
+                                const Ref<const VectorXd> &g = VectorXd::Ones(5))
+              : kc_(s, g), state_(5), start_(s), goal_(g) {
             auto se2_part = std::make_shared<ob::SE2StateSpace>();
             ob::RealVectorBounds sb(2);
             sb.setLow(-2.0);

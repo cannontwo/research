@@ -109,7 +109,7 @@ int main() {
   geometry::ModelPtr car_model;
   std::tie(renderer, car_model) = start_rendering();
 
-  std::shared_ptr<DynamicCarEnvironment> env(new DynamicCarEnvironment);
+  auto env = std::make_shared<DynamicCarEnvironment>(VectorXd::Zero(5), VectorXd::Ones(5));
 
   glfwSetKeyCallback(renderer->viewer->w->get_gl_window(), env_key_callback);
   VectorXd start(5);
