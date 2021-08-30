@@ -65,14 +65,14 @@ Trajectory plan_astar_traj() {
   assert(path[path.size()-1] == goal_idx);
 
   Trajectory traj;
-  traj.push_back(VectorXd::Ones(2), 0.0);
-  traj.push_back(VectorXd::Ones(2), 10.0);
-  //for (unsigned int i = 0; i < path.size(); ++i) {
-  //  VectorXd spt(2);
-  //  spt << locs[path[i]].first,
-  //         locs[path[i]].second;
-  //  traj.push_back(spt, i);
-  //}
+  //traj.push_back(VectorXd::Ones(2), 0.0);
+  //traj.push_back(VectorXd::Ones(2), 10.0);
+  for (unsigned int i = 0; i < path.size(); ++i) {
+    VectorXd spt(2);
+    spt << locs[path[i]].first,
+           locs[path[i]].second;
+    traj.push_back(spt, i);
+  }
 
   return traj;
 }
