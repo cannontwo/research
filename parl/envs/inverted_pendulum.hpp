@@ -86,7 +86,7 @@ namespace cannon {
             return refs;
           }
 
-          virtual std::tuple<VectorXd, double, bool> step(VectorXd control) override {
+          virtual std::tuple<VectorXd, double, bool> step(const VectorXd& control) override {
             if (control.size() != 1)
               throw std::runtime_error("Control passed to inverted pendulum had wrong dimension.");
 

@@ -57,7 +57,7 @@ namespace cannon {
 
           virtual MatrixXd sample_grid_refs(int rows, int cols) const = 0;
 
-          virtual std::tuple<VectorXd, double, bool> step(VectorXd control) = 0;
+          virtual std::tuple<VectorXd, double, bool> step(const VectorXd& control) = 0;
 
           virtual void render() = 0;
 

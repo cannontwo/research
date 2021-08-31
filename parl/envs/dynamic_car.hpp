@@ -110,7 +110,7 @@ namespace cannon {
             return refs;
           }
 
-          virtual std::tuple<VectorXd, double, bool> step(VectorXd control) override {
+          virtual std::tuple<VectorXd, double, bool> step(const VectorXd& control) override {
             if (control.size() != 2)
               throw std::runtime_error("Control passed to dynamic car had wrong dimension.");
 
