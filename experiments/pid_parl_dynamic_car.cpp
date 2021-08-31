@@ -173,13 +173,9 @@ execute_pid_traj(const MultiSpline &plan, PidController &controller,
   return executed;
 }
 
-std::vector<Vector2d>
-execute_parl_pid_traj(const MultiSpline &plan, PidController &controller,
-                      std::shared_ptr<Parl> parl,
-                      std::shared_ptr<DynamicCarEnvironment> env,
-                      double length) {
-
-  controller.reset();
+std::vector<Vector2d> execute_parl_pid_traj(
+    const ControlledTrajectory &traj, std::shared_ptr<Parl> parl,
+    std::shared_ptr<DynamicCarEnvironment> env, double length) {
 
   double time = 0.0;
   VectorXd state = env->reset(VectorXd::Zero(5));
@@ -190,12 +186,10 @@ execute_parl_pid_traj(const MultiSpline &plan, PidController &controller,
     std::cout << "\r" << "On step " << i << std::flush;
     executed.push_back(state.head(2));
 
-    controller.ref() = plan(time);
-    VectorXd pid_action = controller.get_control(state.head(2));
+    VectorXd pid_action = traj(time).second;
 
     // Compute PARL action
-    VectorXd plan_state(5);
-    plan_state.head(2) = plan(time);
+    auto plan_state = traj(time).first;
     auto error_state = compute_error_state(plan_state, state, time);
     auto parl_action = parl->get_action(error_state);
 
@@ -208,11 +202,10 @@ execute_parl_pid_traj(const MultiSpline &plan, PidController &controller,
 
     time += env->get_time_step();
 
-    double tracking_reward = -((state.head(2) - plan(time)).norm());
+    double tracking_reward = -((state.head(2) - plan_state.head(2)).norm());
 
     // Train PARL
-    VectorXd new_plan_state(5);
-    new_plan_state.head(2) = plan(time);
+    auto new_plan_state = traj(time).first;
     auto new_error_state = compute_error_state(new_plan_state, state, time);
     parl->process_datum(error_state, parl_action, tracking_reward, new_error_state);
     states.push_back(error_state);
@@ -258,24 +251,61 @@ int main() {
       make_error_state_space(env, traj.length()), env->get_action_space(),
       make_error_system_refs(traj.length(), 20), params);
 
-  auto pts = execute_pid_traj(plan, controller, env, traj.length());
-  auto path_error = compute_traj_error(plan, pts);
+  auto pid_pts = execute_pid_traj(plan, controller, env, traj.length());
+  auto path_error = compute_traj_error(plan, pid_pts);
 
   // Compute error between plan and controlled path
   log_info("Without PARL, point-to-point path execution error was", path_error);
-  log_info("Without PARL, average path execution error was", path_error / pts.size());
+  log_info("Without PARL, average path execution error was", path_error / pid_pts.size());
+
+
+  std::vector<Vector2d> parl_pts;
+  int cached_traj_num = -1;
+  std::thread plot_thread([&]() {
+    Plotter plotter;
+
+    plotter.render([&]() {
+      static int traj_num = cached_traj_num;
+
+      if (traj_num != cached_traj_num) {
+        plotter.clear();
+        plotter.plot(traj, 200, 0.0, traj.length());
+        plotter.plot(plan, 200, 0.0, traj.length());
+        plotter.plot(pid_pts);
+        plotter.plot(parl_pts);
+
+        traj_num = cached_traj_num;
+      }
+    });
+
+  });
+
+  DynamicCarEnvironment model_env;
+  VectorXd plan_start(5);
+  plan_start.head(2) = traj(0.0);
+  model_env.reset(plan_start);
+  auto controlled_traj = get_pid_controlled_trajectory(
+      [&](const Ref<const VectorXd> &state,
+          const Ref<const VectorXd> &control) {
+
+        model_env.reset(state);
+
+        auto [new_state, reward, done] = model_env.step(control);
+
+        return new_state;
+      },
+      traj, controller, 2, 5);
 
   // Use PARL to augment control, compute error in same way
   for (unsigned int i = 0; i < 100; ++i) {
-    auto parl_pts = execute_parl_pid_traj(plan, controller, parl, env, traj.length());
+    auto new_parl_pts = execute_parl_pid_traj(controlled_traj, parl, env, controlled_traj.length());
+    parl_pts = new_parl_pts;
+    cached_traj_num = i;
     auto parl_path_error = compute_traj_error(plan, parl_pts);
     log_info("With PARL (run", i, "), point-to-point path execution error was", parl_path_error);
     log_info("With PARL (run", i, "), average path execution error was", parl_path_error / parl_pts.size());
 
-    Plotter plotter;
-    plotter.plot(traj, 200, 0.0, traj.length());
-    plotter.plot(plan, 200, 0.0, traj.length());
-    plotter.plot(parl_pts);
-    plotter.render();
   } 
+
+  plot_thread.join();
 }
