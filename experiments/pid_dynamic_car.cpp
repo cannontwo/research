@@ -65,23 +65,22 @@ Trajectory plan_astar_traj() {
   assert(path[path.size()-1] == goal_idx);
 
   Trajectory traj;
-  //traj.push_back(VectorXd::Ones(2), 0.0);
-  //traj.push_back(VectorXd::Ones(2), 10.0);
-  for (unsigned int i = 0; i < path.size(); ++i) {
-    VectorXd spt(2);
-    spt << locs[path[i]].first,
-           locs[path[i]].second;
-    traj.push_back(spt, i);
-  }
+  traj.push_back(VectorXd::Ones(2), 0.0);
+  traj.push_back(VectorXd::Ones(2), 10.0);
+  //for (unsigned int i = 0; i < path.size(); ++i) {
+  //  VectorXd spt(2);
+  //  spt << locs[path[i]].first,
+  //         locs[path[i]].second;
+  //  traj.push_back(spt, i);
+  //}
 
   return traj;
 }
 
-std::vector<Vector2d> plot_pid_traj(const MultiSpline &plan,
-                                    const Ref<const MatrixXd> &kp,
-                                    const Ref<const MatrixXd> &ki,
-                                    const Ref<const MatrixXd> &kd,
-                                    double length) {
+std::pair<std::vector<Vector2d>, std::vector<Vector2d>>
+plot_pid_traj(const MultiSpline &plan, const Ref<const MatrixXd> &kp,
+              const Ref<const MatrixXd> &ki, const Ref<const MatrixXd> &kd,
+              double length) {
   auto env = std::make_shared<DynamicCarEnvironment>(VectorXd::Zero(5), VectorXd::Ones(5));
   PidController controller(2, 2, env->get_time_step());
 
@@ -91,12 +90,13 @@ std::vector<Vector2d> plot_pid_traj(const MultiSpline &plan,
 
   double time = 0.0;
   VectorXd state = env->reset(VectorXd::Zero(5));
-  std::vector<Vector2d> executed;
+  std::vector<Vector2d> executed, controls;
   for (unsigned int i = 0; i < 100 * length; ++i) {
     executed.push_back(state.head(2));
 
     controller.ref() = plan(time);
     VectorXd pid_action = controller.get_control(state.head(2));
+    controls.push_back(env->get_constrained_control(pid_action));
 
     double reward;
     bool done;
@@ -106,7 +106,7 @@ std::vector<Vector2d> plot_pid_traj(const MultiSpline &plan,
   }
 
   executed.push_back(state.head(2));
-  return executed;
+  return std::make_pair(executed, controls);
 }
 
 int main() {
@@ -145,7 +145,7 @@ int main() {
         changed = changed || ImGui::InputFloat("Kd(1, 0)", &Kd(1, 0), -100.0, 100.0);
         changed = changed || ImGui::InputFloat("Kd(1, 1)", &Kd(1, 1), -100.0, 100.0);
 
-        static const char* modes[] = {"Full", "X", "Y"};
+        static const char* modes[] = {"Full", "X", "Y", "Controls"};
         changed = changed || ImGui::Combo("Display Mode", &current_mode, modes, IM_ARRAYSIZE(modes));
         
         ImGui::EndMenu();
@@ -155,7 +155,7 @@ int main() {
 
     if (changed) {
       plotter.clear();
-      auto pts = plot_pid_traj(plan, Kp.cast<double>(), Ki.cast<double>(),
+      auto [pts, controls] = plot_pid_traj(plan, Kp.cast<double>(), Ki.cast<double>(),
                                     Kd.cast<double>(), traj.length());
 
       
@@ -182,6 +182,25 @@ int main() {
           plotter.plot([&](double t) { return plan(t)[1]; }, 200, 0.0,
                        traj.length());
           for (auto& p : pts) {
+            Vector2d tmp;
+            tmp << time, p[1];
+            pts_oned.push_back(tmp);
+            time += 0.01;
+          }
+          plotter.plot(pts_oned);
+          break;
+        case 3:
+          // TODO Plot controls
+          for (auto& p : controls) {
+            Vector2d tmp;
+            tmp << time, p[0];
+            pts_oned.push_back(tmp);
+            time += 0.01;
+          }
+          plotter.plot(pts_oned);
+          pts_oned.clear();
+          time = 0.0;
+          for (auto& p : controls) {
             Vector2d tmp;
             tmp << time, p[1];
             pts_oned.push_back(tmp);

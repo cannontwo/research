@@ -156,6 +156,7 @@ execute_pid_traj(const MultiSpline &plan, PidController &controller,
   //env->render();
   std::vector<Vector2d> executed;
   for (unsigned int i = 0; i < 100 * length; ++i) {
+    std::cout << "\r" << "On step " << i << std::flush;
     executed.push_back(state.head(2));
 
     controller.ref() = plan(time);
@@ -165,7 +166,9 @@ execute_pid_traj(const MultiSpline &plan, PidController &controller,
     bool done;
     std::tie(state, reward, done) = env->step(pid_action);
     //env->render();
-
+    
+    log_info("State is", state);
+    
     time += env->get_time_step();
   }
 

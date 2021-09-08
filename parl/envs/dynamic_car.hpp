@@ -114,14 +114,18 @@ namespace cannon {
             if (control.size() != 2)
               throw std::runtime_error("Control passed to dynamic car had wrong dimension.");
 
-            double reward;
-            std::tie(state_, reward) = kc_.step(control[0], control[1]);
+            auto clipped_control = get_constrained_control(control);
 
-            state_[0] = std::max(-2.0, std::min(2.0, state_[0]));
-            state_[1] = std::max(-2.0, std::min(2.0, state_[1]));
-            state_[2] = std::atan2(std::sin(state_[2]), std::cos(state_[2]));
-            state_[3] = std::max(-1.0, std::min(1.0, state_[3]));
-            state_[4] = std::max(-M_PI * 30 / 180.0, std::min(M_PI * 30 / 180.0, state_[4]));
+            double reward;
+            std::tie(state_, reward) = kc_.step(clipped_control[0], clipped_control[1]);
+
+            state_ = get_constrained_state(state_);
+
+            //state_[0] = std::max(-2.0, std::min(2.0, state_[0]));
+            //state_[1] = std::max(-2.0, std::min(2.0, state_[1]));
+            //state_[2] = std::atan2(std::sin(state_[2]), std::cos(state_[2]));
+            //state_[3] = std::max(-1.0, std::min(1.0, state_[3]));
+            //state_[4] = std::max(-M_PI * 30 / 180.0, std::min(M_PI * 30 / 180.0, state_[4]));
 
             kc_.reset(state_);
 
