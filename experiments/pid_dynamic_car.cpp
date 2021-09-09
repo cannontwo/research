@@ -40,15 +40,18 @@ Graph construct_grid(unsigned int rows, unsigned int cols) {
 }
 
 Trajectory plan_astar_traj() {
-  unsigned int rows = 10;
-  unsigned int cols = 10;
+  unsigned int rows = 2;
+  unsigned int cols = 2;
   Graph g = construct_grid(rows, cols);
+
+  double horiz_diff = 1.0 / (cols-1);
+  double vert_diff = 1.0 / (rows-1);
 
   std::vector<std::pair<double, double>> locs(rows * cols);
 
   for (unsigned int i = 0; i < cols; ++i) {
     for (unsigned int j = 0; j < rows; ++j) {
-      locs[node_id(cols, i, j)] = std::make_pair(static_cast<double>(i) * 0.1, static_cast<double>(j) * 0.1);
+      locs[node_id(cols, i, j)] = std::make_pair(static_cast<double>(i) * horiz_diff, static_cast<double>(j) * vert_diff);
     }
   }
 
@@ -65,14 +68,14 @@ Trajectory plan_astar_traj() {
   assert(path[path.size()-1] == goal_idx);
 
   Trajectory traj;
-  traj.push_back(VectorXd::Ones(2), 0.0);
-  traj.push_back(VectorXd::Ones(2), 10.0);
-  //for (unsigned int i = 0; i < path.size(); ++i) {
-  //  VectorXd spt(2);
-  //  spt << locs[path[i]].first,
-  //         locs[path[i]].second;
-  //  traj.push_back(spt, i);
-  //}
+  //traj.push_back(VectorXd::Ones(2), 0.0);
+  //traj.push_back(VectorXd::Ones(2), 10.0);
+  for (unsigned int i = 0; i < path.size(); ++i) {
+    VectorXd spt(2);
+    spt << locs[path[i]].first,
+           locs[path[i]].second;
+    traj.push_back(spt, i*10);
+  }
 
   return traj;
 }
