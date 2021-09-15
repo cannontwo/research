@@ -49,7 +49,7 @@ Parl::Parl(const std::shared_ptr<ob::StateSpace> state_space,
   dynam_ref_tree_->insert(dynam_refs_);
   value_ref_tree_->insert(value_refs_);
 
-  for (int i = 0; i < num_dynam_refs_; i++) {
+  for (unsigned int i = 0; i < num_dynam_refs_; i++) {
     // The dynamics models predict on (state, action) -> state
     dynamics_models_.emplace_back(state_dim_ + action_dim_,
         state_dim_, params_.alpha, params_.forgetting_factor);
@@ -58,7 +58,7 @@ Parl::Parl(const std::shared_ptr<ob::StateSpace> state_space,
         params_.controller_learning_rate, params_.use_adam);
 
     // Checking KDT construction
-    assert(dynam_ref_tree_->get_nearest_idx(dynam_refs_.col(i)) == i);
+    assert(dynam_ref_tree_->get_nearest_idx(dynam_refs_.col(i)) == static_cast<int>(i));
   }
 
   VectorXd zero_vec = VectorXd::Zero(state_dim_);
@@ -82,14 +82,13 @@ Parl::Parl(const std::shared_ptr<ob::StateSpace> state_space,
 }
 
 void Parl::process_datum(const VectorXd& state, const VectorXd& action,
-    double reward, const VectorXd& next_state, bool done,
+    double reward, const VectorXd& next_state, bool /*done*/,
     bool use_local) {
   check_state_dim_(state);
   check_state_dim_(next_state);
   check_action_dim_(action);
 
   int dynam_idx = dynam_ref_tree_->get_nearest_idx(state);
-  int dynam_next_idx = dynam_ref_tree_->get_nearest_idx(next_state);
   int value_idx = value_ref_tree_->get_nearest_idx(state);
   int value_next_idx = value_ref_tree_->get_nearest_idx(next_state);
 
@@ -420,7 +419,7 @@ MatrixXd Parl::get_B_matrix_(const VectorXd& state) const {
 }
 
 MatrixXd Parl::get_A_matrix_idx_(int idx) const {
-  if (idx >= num_dynam_refs_)
+  if (idx >= static_cast<int>(num_dynam_refs_))
     throw std::runtime_error("Ref point index too large");
 
   MatrixXd theta = dynamics_models_[idx].get_identified_mats().first;
@@ -428,7 +427,7 @@ MatrixXd Parl::get_A_matrix_idx_(int idx) const {
 }
 
 MatrixXd Parl::get_B_matrix_idx_(int idx) const {
-  if (idx >= num_dynam_refs_)
+  if (idx >= static_cast<int>(num_dynam_refs_))
     throw std::runtime_error("Ref point index too large");
 
   MatrixXd theta = dynamics_models_[idx].get_identified_mats().first;
@@ -436,7 +435,7 @@ MatrixXd Parl::get_B_matrix_idx_(int idx) const {
 }
 
 VectorXd Parl::get_c_vector_idx_(int idx) const {
-  if (idx >= num_dynam_refs_)
+  if (idx >= static_cast<int>(num_dynam_refs_))
     throw std::runtime_error("Ref point index too large");
 
   return dynamics_models_[idx].get_identified_mats().second;
@@ -446,7 +445,7 @@ void Parl::set_dynamics_idx_(int idx, const Ref<const MatrixXd> &A,
                              const Ref<const MatrixXd> &B,
                              const Ref<const VectorXd> &c,
                              const Ref<const VectorXd>& in_mean) {
-  if (idx >= num_dynam_refs_)
+  if (idx >= static_cast<int>(num_dynam_refs_))
     throw std::runtime_error("Ref point index too large");
 
   if (A.rows() != state_dim_ || A.cols() != state_dim_) 
@@ -469,14 +468,14 @@ void Parl::set_dynamics_idx_(int idx, const Ref<const MatrixXd> &A,
 }
 
 MatrixXd Parl::get_K_matrix_idx_(int idx) const {
-  if (idx >= num_dynam_refs_)
+  if (idx >= static_cast<int>(num_dynam_refs_))
     throw std::runtime_error("Ref point index too large");
 
   return controllers_[idx].get_mats().second;
 }
 
 void Parl::set_K_matrix_idx_(int idx, const Ref<const MatrixXd>& K) {
-  if (idx >= num_dynam_refs_)
+  if (idx >= static_cast<int>(num_dynam_refs_))
     throw std::runtime_error("Ref point index too large");
 
   if (K.rows() != action_dim_ || K.cols() != state_dim_)
@@ -486,14 +485,14 @@ void Parl::set_K_matrix_idx_(int idx, const Ref<const MatrixXd>& K) {
 }
 
 VectorXd Parl::get_k_vector_idx_(int idx) const {
-  if (idx >= num_dynam_refs_)
+  if (idx >= static_cast<int>(num_dynam_refs_))
     throw std::runtime_error("Ref point index too large");
 
   return controllers_[idx].get_mats().first;
 }
 
 void Parl::set_k_matrix_idx_(int idx, const Ref<const VectorXd>& k) {
-  if (idx >= num_dynam_refs_)
+  if (idx >= static_cast<int>(num_dynam_refs_))
     throw std::runtime_error("Ref point index too large");
 
   if (k.size() != action_dim_)

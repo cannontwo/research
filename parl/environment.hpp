@@ -120,7 +120,7 @@ namespace cannon {
             auto action_space = get_action_space();
             auto bounds = action_space->getBounds();
 
-            assert(bounds.low.size() == control.size());
+            assert(static_cast<long int>(bounds.low.size()) == control.size());
 
             VectorXd ret_control = VectorXd::Zero(control.size());
             for (unsigned int i = 0; i < control.size(); ++i) {

@@ -14,3 +14,4 @@ list(APPEND RESEARCH_SOURCES
   )
 
 add_library(research OBJECT ${RESEARCH_SOURCES})
+target_compile_options(research PUBLIC -Wextra -Werror -Wno-error=deprecated-copy)

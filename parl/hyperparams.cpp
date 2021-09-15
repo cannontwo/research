@@ -34,7 +34,7 @@ void Hyperparams::load_config(const std::string& filename) {
       throw std::runtime_error("states_periodic in YAML config was not a sequence");
 
     states_periodic.resize(sp.size());
-    for (int i = 0; i < sp.size(); i++) {
+    for (size_t i = 0; i < sp.size(); i++) {
       states_periodic[i] = sp[i].as<bool>();
     } 
   }

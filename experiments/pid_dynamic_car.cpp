@@ -193,7 +193,6 @@ int main() {
           plotter.plot(pts_oned);
           break;
         case 3:
-          // TODO Plot controls
           for (auto& p : controls) {
             Vector2d tmp;
             tmp << time, p[0];

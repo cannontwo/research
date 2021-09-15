@@ -247,7 +247,7 @@ cannon::research::parl::find_lyapunov(const PWAFunc& pwa, const TransitionMap&
 
 std::tuple<PWAFunc, TransitionMap, OutMap>
 cannon::research::parl::refine_pwa(const PWAFunc& pwa, const TransitionMap&
-    transition_map, const OutMap& out_map) {
+    transition_map, const OutMap& /*out_map*/) {
 
   std::multimap<unsigned int, unsigned int> new_polys;
 

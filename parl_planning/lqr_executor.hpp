@@ -41,8 +41,9 @@ namespace cannon {
                       double tracking_threshold = 0.5, bool learn = false,
                       bool render = false, int max_overall_timestep = 1e4,
                       int controller_update_interval = 10)
-              : env_(env), goal_(goal),
+              : env_(env),
                 tracking_threshold_(tracking_threshold), 
+                goal_(goal),
                 overall_timestep_(0),
                 max_overall_timestep_(max_overall_timestep),
                 controller_update_interval_(controller_update_interval),

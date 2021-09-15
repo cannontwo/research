@@ -127,8 +127,8 @@ namespace cannon {
           // TODO Move to hyperparams
           double action_noise_scale_ = 0.1;
 
-          int num_dynam_refs_;
-          int num_value_refs_;
+          unsigned int num_dynam_refs_;
+          unsigned int num_value_refs_;
           MatrixXd dynam_refs_;
           MatrixXd value_refs_;
 

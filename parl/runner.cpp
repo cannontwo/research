@@ -25,7 +25,7 @@ Runner::Runner(EnvironmentPtr env, std::shared_ptr<Parl> p,
 
   load_config(config_filename);
 
-  initial_controller_ = [&](const Ref<const VectorXd>& x) {
+  initial_controller_ = [&](const Ref<const VectorXd>& /*x*/) {
     static int action_dim = env_->get_action_space()->getDimension();
     static auto covar = MatrixXd::Identity(action_dim, action_dim);
     static auto mean = VectorXd::Zero(action_dim);
@@ -45,7 +45,7 @@ Runner::Runner(EnvironmentPtr env, const std::string &config_filename,
   load_config(config_filename);
   MatrixXd refs = sample_refs_();
 
-  initial_controller_ = [&](const Ref<const VectorXd>& x) {
+  initial_controller_ = [&](const Ref<const VectorXd>& /*x*/) {
     static int action_dim = env_->get_action_space()->getDimension();
     static auto covar = MatrixXd::Identity(action_dim, action_dim);
     static auto mean = VectorXd::Zero(action_dim);
