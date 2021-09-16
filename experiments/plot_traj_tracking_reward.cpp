@@ -179,19 +179,15 @@ execute_pid_traj(const MultiSpline &plan, PidController &controller,
   return executed;
 }
 
-std::pair<std::vector<Vector2d>, double>
-execute_parl_pid_traj(const MultiSpline &plan,
-                      const ControlledTrajectory &traj,
-                      std::shared_ptr<Parl> parl,
-                      std::shared_ptr<DynamicCarEnvironment> env, double length,
-                      bool do_controller_update) {
+std::vector<Vector2d> execute_parl_pid_traj(
+    const ControlledTrajectory &traj, std::shared_ptr<Parl> parl,
+    std::shared_ptr<DynamicCarEnvironment> env, double length, bool do_controller_update) {
 
   double time = 0.0;
   VectorXd state = env->reset(VectorXd::Zero(5));
   //env->render();
   std::vector<Vector2d> executed;
   std::vector<VectorXd> states;
-  double total_reward = 0.0;
   for (unsigned int i = 0; i < 100 * length; ++i) {
     std::cout << "\r" << "On step " << i << std::flush;
     executed.push_back(state.head(2));
@@ -212,11 +208,7 @@ execute_parl_pid_traj(const MultiSpline &plan,
 
     time += env->get_time_step();
 
-    auto traj_state = plan(time);
-
     double tracking_reward = -((state.head(2) - plan_state.head(2)).norm());
-
-    total_reward += tracking_reward;
 
     // Train PARL
     auto new_plan_state = traj(time).first;
@@ -232,7 +224,7 @@ execute_parl_pid_traj(const MultiSpline &plan,
   }
 
   executed.push_back(state.head(2));
-  return std::make_pair(executed, total_reward);
+  return executed;
 }
 
 int main() {
@@ -274,6 +266,8 @@ int main() {
   log_info("Without PARL, point-to-point path execution error was", path_error);
   log_info("Without PARL, average path execution error was", path_error / pid_pts.size());
 
+
+  std::vector<Vector2d> parl_pts;
   DynamicCarEnvironment model_env;
   VectorXd plan_start(5);
   plan_start.head(2) = traj(0.0);
@@ -290,52 +284,32 @@ int main() {
       },
       traj, controller, 2, 5);
 
-  std::vector<Vector2d> parl_pts;
-  int cached_traj_num = -1;
-  std::thread plot_thread([&]() {
-    Plotter plotter;
+  // TODO Make time an IMGUI control
+  Plotter plotter;
+  plotter.render([&]() {
+    static float time = 0.0;
 
-    plotter.render([&]() {
-      static int traj_num = cached_traj_num;
+    bool changed = false;
+    if (ImGui::BeginMainMenuBar()) {
+      if (ImGui::BeginMenu("Reward Plotting")) {
+        changed = changed || ImGui::SliderFloat("Traj time", &time, 0.0, controlled_traj.length());
 
-      if (traj_num != cached_traj_num) {
-        plotter.clear();
-        plotter.plot(traj, 200, 0.0, traj.length());
-        plotter.plot(plan, 200, 0.0, traj.length());
-        plotter.plot([&](double t) { return controlled_traj(t).first; }, 200,
-                     0.0, controlled_traj.length());
-
-        plotter.plot(pid_pts);
-        plotter.plot(parl_pts);
-
-        traj_num = cached_traj_num;
+        ImGui::EndMenu();
       }
-    });
+      ImGui::EndMainMenuBar();
+    }
 
+    if (changed) {
+      plotter.clear();
+      plotter.plot([&](const Vector2d &p) {
+        auto plan_state = controlled_traj(time).first;
+        double tracking_reward = -((p - plan_state.head(2)).norm());
+        return tracking_reward;
+      }, 15, -2.0, 2.0, -2.0, 2.0);
+      plotter.plot(plan, 200, 0.0, traj.length());
+      plotter.plot([&](double t){
+          return controlled_traj(t).first;
+          }, 200, 0.0, controlled_traj.length());
+    }
   });
-
-  // Doing initial learning
-  for (unsigned int i = 0; i < 100; ++i) {
-    auto [new_parl_pts, total_reward] = execute_parl_pid_traj(plan, controlled_traj, parl, env, controlled_traj.length(), false);
-    parl_pts = new_parl_pts;
-    cached_traj_num = i;
-    auto parl_path_error = compute_traj_error(plan, parl_pts);
-    log_info("Initial training (run", i, "), point-to-point path execution error was", parl_path_error);
-    log_info("Initial training (run", i, "), average path execution error was", parl_path_error / parl_pts.size());
-    log_info("Initial training (run", i, "), had trajectory tracking reward", total_reward);
-  }
-
-  // Use PARL to augment control, compute error in same way
-  for (unsigned int i = 0; i < 1000; ++i) {
-    auto [new_parl_pts, total_reward] = execute_parl_pid_traj(plan, controlled_traj, parl, env, controlled_traj.length(), true);
-    parl_pts = new_parl_pts;
-    cached_traj_num = i;
-    auto parl_path_error = compute_traj_error(plan, parl_pts);
-    log_info("With PARL (run", i, "), point-to-point path execution error was", parl_path_error);
-    log_info("With PARL (run", i, "), average path execution error was", parl_path_error / parl_pts.size());
-    log_info("With PARL (run", i, "), had trajectory tracking reward", total_reward);
-
-  } 
-
-  plot_thread.join();
 }
