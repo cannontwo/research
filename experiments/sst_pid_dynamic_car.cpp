@@ -208,6 +208,7 @@ plot_pid_traj(const ControlledTrajectory& traj, const Ref<const MatrixXd> &kp,
 
 int main() {
   auto traj = plan_sst_traj();
+  traj.save("logs/sst_dynamic_car_plan.h5");
 
   MatrixXf Kp(2, 2), Ki(2, 2), Kd(2, 2);
 
