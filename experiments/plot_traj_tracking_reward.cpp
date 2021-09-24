@@ -16,7 +16,6 @@ int main() {
   ControlledTrajectory traj;
   traj.load("logs/sst_dynamic_car_plan.h5");
 
-  // TODO Make time an IMGUI control
   Plotter plotter;
   plotter.render([&]() {
     static float time = 0.0;

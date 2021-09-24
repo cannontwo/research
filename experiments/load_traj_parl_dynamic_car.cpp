@@ -78,6 +78,41 @@ MatrixXd make_error_system_refs(double length, unsigned int num_refs=100) {
   return refs;
 }
 
+MatrixXd make_error_system_value_refs(const ControlledTrajectory& traj, unsigned int num_refs=100) {
+  auto times = get_ref_point_times(traj.length(), num_refs);
+
+  auto spline = traj.state_traj().interp();
+
+  //Trajectory traj_2d;
+  //for (unsigned int i = 0; i < times.size(); ++i) {
+  //  VectorXd s = VectorXd::Zero(2);
+  //  s = spline(times[i]).head(2);
+  //  traj_2d.push_back(s, times[i]);
+  //}
+  //auto spline_2d = traj_2d.interp();
+
+  // Since this is the error system, all dimensions except for time should be
+  // zero
+  //
+  // TODO Right now this is just hard coded along normal vector -- is there a better way to decide how to place refs around trajectory?
+  MatrixXd refs = MatrixXd::Zero(6, 3*times.size());
+  for (unsigned int i = 0; i < times.size(); i++) {
+    refs(5, 3*i) = times[i];
+
+    VectorXd value_ref_pos = VectorXd::Zero(6);
+    value_ref_pos.head(5) = spline.normal(times[i]);
+    value_ref_pos[5] = times[i];
+    refs.col(3*i + 1) = value_ref_pos;
+
+    VectorXd value_ref_neg = VectorXd::Zero(6);
+    value_ref_neg.head(5) = -spline.normal(times[i]);
+    value_ref_neg[5] = times[i];
+    refs.col(3*i + 2) = value_ref_neg;
+  }
+
+  return refs;
+}
+
 std::shared_ptr<ob::StateSpace>
 make_error_state_space(std::shared_ptr<Environment> env, double duration) {
   auto time_space = std::make_shared<ob::RealVectorStateSpace>(1);
@@ -172,9 +207,24 @@ int main() {
   params.load_config("/home/cannon/Documents/cannon/cannon/research/"
                      "experiments/parl_configs/r10c10_dc.yaml");
 
-  auto parl = std::make_shared<Parl>(
-      make_error_state_space(env, traj.length()), env->get_action_space(),
-      make_error_system_refs(traj.length(), 20), params);
+  MatrixXd refs = make_error_system_refs(traj.length(), 20);
+  MatrixX2f ref_points = MatrixX2f::Zero(refs.cols(), 2);
+  for (unsigned int i = 0; i < refs.cols(); ++i) {
+    VectorXd traj_pt = traj(refs(5, i)).first;
+    ref_points.row(i) = traj_pt.head(2).cast<float>();
+  }
+
+  MatrixXd value_refs = make_error_system_value_refs(traj, 20);
+  MatrixX2f value_ref_points = MatrixX2f::Zero(value_refs.cols(), 2);
+  for (unsigned int i = 0; i < value_refs.cols(); ++i) {
+    VectorXd traj_pt = traj(value_refs(5, i)).first;
+    VectorXd ref_pt = traj_pt + value_refs.col(i).head(5);
+    value_ref_points.row(i) = ref_pt.head(2).cast<float>();
+  }
+
+  auto parl =
+      std::make_shared<Parl>(make_error_state_space(env, traj.length()),
+                             env->get_action_space(), refs, value_refs, params);
 
   DynamicCarEnvironment model_env;
   VectorXd plan_start(5);
@@ -183,22 +233,22 @@ int main() {
 
   std::vector<Vector2d> parl_pts;
   int cached_traj_num = -1;
-  std::thread plot_thread([&]() {
-    Plotter plotter;
+  //std::thread plot_thread([&]() {
+  //  Plotter plotter;
 
-    plotter.render([&]() {
-      static int traj_num = cached_traj_num;
+  //  plotter.render([&]() {
+  //    static int traj_num = cached_traj_num;
 
-      if (traj_num != cached_traj_num) {
-        plotter.clear();
-        plotter.plot([&](double t){return traj(t).first;}, 200, 0.0, traj.length());
-        plotter.plot(parl_pts);
+  //    if (traj_num != cached_traj_num) {
+  //      plotter.clear();
+  //      plotter.plot([&](double t){return traj(t).first;}, 200, 0.0, traj.length());
+  //      plotter.plot(parl_pts);
 
-        traj_num = cached_traj_num;
-      }
-    });
+  //      traj_num = cached_traj_num;
+  //    }
+  //  });
 
-  });
+  //});
 
   // Doing initial learning
   for (unsigned int i = 0; i < 100; ++i) {
@@ -212,7 +262,7 @@ int main() {
   }
 
   // Use PARL to augment control, compute error in same way
-  for (unsigned int i = 0; i < 1000; ++i) {
+  for (unsigned int i = 0; i < 100; ++i) {
     auto [new_parl_pts, total_reward] = execute_parl_pid_traj(traj, parl, env, true);
     parl_pts = new_parl_pts;
     cached_traj_num = i;
@@ -223,5 +273,36 @@ int main() {
 
   } 
 
-  plot_thread.join();
+  //plot_thread.join();
+  
+  // Plotting learned value function
+  Plotter plotter;
+  plotter.render([&]() {
+    static float time = 0.0;
+
+    bool changed = false;
+    if (ImGui::BeginMainMenuBar()) {
+      if (ImGui::BeginMenu("Reward Plotting")) {
+        changed = changed || ImGui::SliderFloat("Traj time", &time, 0.0, traj.length());
+
+        ImGui::EndMenu();
+      }
+      ImGui::EndMainMenuBar();
+    }
+
+    if (changed) {
+      plotter.clear();
+      plotter.plot([&](const Vector2d &p) {
+        VectorXd full_p = VectorXd::Zero(5);
+        full_p.head(2) = p;
+        auto plan_state = traj(time).first;
+        return parl->predict_value(compute_error_state(plan_state, full_p, time));
+      }, 15, -2.0, 2.0, -2.0, 2.0);
+      plotter.plot([&](double t){
+          return traj(t).first;
+          }, 200, 0.0, traj.length());
+      plotter.plot_points(value_ref_points, {1.0, 0.0, 0.0, 1.0});
+    }
+  });
+  
 }

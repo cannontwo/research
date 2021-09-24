@@ -20,7 +20,7 @@ int main() {
 
   auto env = std::make_shared<InvertedPendulumEnvironment>();
 
-  Runner r(env, "/home/cannon/Documents/cannon/cannon/research/experiments/parl_configs/r10c10_short.yaml",false);
+  Runner r(env, "/home/cannon/Documents/cannon/cannon/research/experiments/parl_configs/r10c10_short.yaml", true);
 
   r.run();
 
