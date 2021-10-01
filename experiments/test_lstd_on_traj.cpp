@@ -71,7 +71,7 @@ int main(int argc, char** argv) {
   InvertedPendulumEnvironment env;
   Hyperparams params;
   params.load_config("/home/cannon/Documents/cannon/cannon/research/experiments/parl_configs/r10c10_short.yaml");
-  Parl model(env.get_state_space(), env.get_action_space(), env.sample_grid_refs(10, 10), params, 0, false);
+  Parl model(env.get_state_space(), env.get_action_space(), env.sample_grid_refs({10, 10}), params, 0, false);
 
   for (int i = 0; i < 199; i++) {
     model.process_datum(traj[i].state, traj[i].action, traj[i].reward, traj[i+1].state);

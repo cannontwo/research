@@ -90,12 +90,12 @@ namespace cannon {
           /*!
            * \brief Sample a grid of reference states in this environment.
            *
-           * \param rows Number of rows for sampled grid
-           * \param cols Number of columns for sampled grid
+           * \param grid_sizes Vector of sizes for each dimension of the
+           * reference state grid. Should have size > 0.
            *
            * \returns Matrix containing sampled reference states, one in each column.
            */
-          virtual MatrixXd sample_grid_refs(int rows, int cols) const = 0;
+          virtual MatrixXd sample_grid_refs(std::vector<int> grid_sizes) const = 0;
 
           /*!
            * \brief Step the state of this environment, advancing time by the discrete time step.

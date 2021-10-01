@@ -10,7 +10,7 @@ agent:
   forgetting_factor: 1.0
   controller_learning_rate: 1.0
   use_tanh: false
-  use_clipping: true
+  use_clipping: false
   use_line_search: true
   clip_line_search: false
   use_adam: false

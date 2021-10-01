@@ -30,9 +30,10 @@ namespace cannon {
 
       class DynamicCarEnvironment : public Environment {
         public:
-          DynamicCarEnvironment(const Ref<const VectorXd> &s = VectorXd::Zero(5),
-                                const Ref<const VectorXd> &g = VectorXd::Ones(5))
-              : kc_(s, g), state_(5), start_(s), goal_(g) {
+          DynamicCarEnvironment(
+              const Ref<const VectorXd> &s = VectorXd::Zero(5),
+              const Ref<const VectorXd> &g = VectorXd::Ones(5), double l = 1.0)
+              : kc_(s, g, l), state_(5), start_(s), goal_(g) {
             auto se2_part = std::make_shared<ob::SE2StateSpace>();
             ob::RealVectorBounds sb(2);
             sb.setLow(-2.0);
@@ -84,28 +85,49 @@ namespace cannon {
             return state_;
           }
           
-          virtual MatrixXd sample_grid_refs(int rows, int cols) const override {
-            MatrixXd refs(5, rows * cols);
+          virtual MatrixXd sample_grid_refs(std::vector<int> grid_sizes) const override {
+            grid_sizes.resize(5, 1);
 
-            VectorXd xs = VectorXd::LinSpaced(cols,
-                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().low[0],
-                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().high[0]);
-            VectorXd ys = VectorXd::LinSpaced(rows,
-                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().low[1],
-                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().high[1]);
-
-            for (int i = 0; i < rows; i++) {
-              for (int j = 0; j < cols; j++) {
-                int idx = (i * cols) + j;
-                refs(0, idx) = xs[j];
-                refs(1, idx) = ys[i];
-                refs(2, idx) = 0.0;
-                refs(3, idx) = 0.0;
-                refs(4, idx) = 0.0;
-              }
+            int total_refs = 1;
+            for (unsigned int i = 0; i < 5; ++i) {
+              total_refs *= grid_sizes[i]; 
             }
 
-            // TODO Also sample other dimensions?
+            MatrixXd refs(5, total_refs);
+
+            VectorXd xs = VectorXd::LinSpaced(grid_sizes[0],
+                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().low[0],
+                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().high[0]);
+            VectorXd ys = VectorXd::LinSpaced(grid_sizes[1],
+                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().low[1],
+                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().high[1]);
+            VectorXd ths = VectorXd::LinSpaced(grid_sizes[2], -M_PI, M_PI);
+
+            VectorXd vs = VectorXd::LinSpaced(grid_sizes[3],
+                state_space_->getSubspace(1)->as<ob::RealVectorStateSpace>()->getBounds().low[0],
+                state_space_->getSubspace(1)->as<ob::RealVectorStateSpace>()->getBounds().high[0]);
+            VectorXd dths = VectorXd::LinSpaced(grid_sizes[4],
+                state_space_->getSubspace(1)->as<ob::RealVectorStateSpace>()->getBounds().low[1],
+                state_space_->getSubspace(1)->as<ob::RealVectorStateSpace>()->getBounds().high[1]);
+
+            unsigned int idx = 0;
+            for (int i = 0; i < grid_sizes[0]; i++) {
+              for (int j = 0; j < grid_sizes[1]; j++) {
+                for (int k = 0; k < grid_sizes[2]; k++) {
+                  for (int l = 0; l < grid_sizes[3]; l++) {
+                    for (int m = 0; m < grid_sizes[4]; m++) {
+                      refs(0, idx) = xs[i];
+                      refs(1, idx) = ys[j];
+                      refs(2, idx) = ths[k];
+                      refs(3, idx) = vs[l];
+                      refs(4, idx) = dths[m];
+
+                      ++idx;
+                    }
+                  }
+                }
+              }
+            }
 
             return refs;
           }

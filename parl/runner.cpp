@@ -267,11 +267,11 @@ std::shared_ptr<Environment> Runner::get_env() {
 // Private methods
 MatrixXd Runner::sample_refs_() {
   if (use_grid_refs)
-    return env_->sample_grid_refs(ref_rows, ref_cols);
+    return env_->sample_grid_refs({ref_cols, ref_rows});
   else
     return env_->sample_random_refs(random_refs);
 }
 
 MatrixXd Runner::sample_value_refs_() {
-  return env_->sample_grid_refs(value_ref_rows, value_ref_cols);
+  return env_->sample_grid_refs({value_ref_cols, value_ref_rows});
 }

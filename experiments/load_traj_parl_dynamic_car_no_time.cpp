@@ -104,12 +104,16 @@ execute_parl_pid_traj(const ControlledTrajectory &traj,
     bool done;
     std::tie(state, reward, done) = env->step(combined_action);
     //env->render();
+    
+    auto constrained_combined_action = env->get_constrained_control(combined_action);
+    auto effective_parl_action = constrained_combined_action - pid_action;
 
     time += env->get_time_step();
 
     auto traj_state = traj(time).first;
 
-    double tracking_reward = -((state.head(2) - plan_state.head(2)).norm()) - 0.2*parl_action.norm();
+    double tracking_reward = -((state.head(2) - plan_state.head(2)).norm()) -
+                             0.2 * effective_parl_action.norm();
 
     total_reward += tracking_reward;
 
@@ -132,7 +136,7 @@ execute_parl_pid_traj(const ControlledTrajectory &traj,
 
 int main() {
   auto env = std::make_shared<DynamicCarEnvironment>(VectorXd::Zero(5),
-                                                     VectorXd::Ones(5));
+                                                     VectorXd::Ones(5), 0.9);
 
   ControlledTrajectory traj;
   traj.load("logs/sst_dynamic_car_plan.h5");
@@ -141,34 +145,29 @@ int main() {
   params.load_config("/home/cannon/Documents/cannon/cannon/research/"
                      "experiments/parl_configs/r10c10_dc.yaml");
 
-  MatrixXd refs = env->sample_grid_refs(5, 5) * 0.1;
+  MatrixXd refs = env->sample_grid_refs({2, 2, 5, 1, 1}) * 0.1;
 
   auto parl = std::make_shared<Parl>(env->get_state_space(),
                                      env->get_action_space(), refs, params);
 
-  DynamicCarEnvironment model_env;
-  VectorXd plan_start(5);
-  plan_start.head(2) = traj(0.0).first.head(2);
-  model_env.reset(plan_start);
-
   std::vector<Vector2d> parl_pts;
   int cached_traj_num = -1;
-  //std::thread plot_thread([&]() {
-  //  Plotter plotter;
+  std::thread plot_thread([&]() {
+    Plotter plotter;
 
-  //  plotter.render([&]() {
-  //    static int traj_num = cached_traj_num;
+    plotter.render([&]() {
+      static int traj_num = cached_traj_num;
 
-  //    if (traj_num != cached_traj_num) {
-  //      plotter.clear();
-  //      plotter.plot([&](double t){return traj(t).first;}, 200, 0.0, traj.length());
-  //      plotter.plot(parl_pts);
+      if (traj_num != cached_traj_num) {
+        plotter.clear();
+        plotter.plot([&](double t){return traj(t).first;}, 200, 0.0, traj.length());
+        plotter.plot(parl_pts);
 
-  //      traj_num = cached_traj_num;
-  //    }
-  //  });
+        traj_num = cached_traj_num;
+      }
+    });
 
-  //});
+  });
 
   // Doing initial learning
   for (unsigned int i = 0; i < 100; ++i) {
@@ -193,43 +192,43 @@ int main() {
 
   } 
 
-  //plot_thread.join();
+  plot_thread.join();
   
   // Plotting learned value function
-  Plotter plotter;
-  plotter.render([&]() {
-    static float time = 0.0;
+  //Plotter plotter;
+  //plotter.render([&]() {
+  //  static float time = 0.0;
 
-    bool changed = false;
-    if (ImGui::BeginMainMenuBar()) {
-      if (ImGui::BeginMenu("Reward Plotting")) {
-        changed = changed || ImGui::SliderFloat("Traj time", &time, 0.0, traj.length());
+  //  bool changed = false;
+  //  if (ImGui::BeginMainMenuBar()) {
+  //    if (ImGui::BeginMenu("Reward Plotting")) {
+  //      changed = changed || ImGui::SliderFloat("Traj time", &time, 0.0, traj.length());
 
-        ImGui::EndMenu();
-      }
-      ImGui::EndMainMenuBar();
-    }
+  //      ImGui::EndMenu();
+  //    }
+  //    ImGui::EndMainMenuBar();
+  //  }
 
-    if (changed) {
-      plotter.clear();
+  //  if (changed) {
+  //    plotter.clear();
 
-      auto plan_state = traj(time).first;
-      plotter.plot([&](const Vector2d &p) {
-        VectorXd full_p = VectorXd::Zero(5);
-        full_p.head(2) = p;
-        full_p.tail(3) = plan_state.tail(3);
-        return parl->predict_value(compute_error_state(plan_state, full_p));
-      }, 15, plan_state[0] - 0.4, plan_state[0] + 0.4, plan_state[1] - 0.4, plan_state[1] + 0.4);
-      plotter.plot([&](double t){
-          return traj(t).first;
-          }, 200, 0.0, traj.length());
+  //    auto plan_state = traj(time).first;
+  //    plotter.plot([&](const Vector2d &p) {
+  //      VectorXd full_p = VectorXd::Zero(5);
+  //      full_p.head(2) = p;
+  //      full_p.tail(3) = plan_state.tail(3);
+  //      return parl->predict_value(compute_error_state(plan_state, full_p));
+  //    }, 15, plan_state[0] - 0.4, plan_state[0] + 0.4, plan_state[1] - 0.4, plan_state[1] + 0.4);
+  //    plotter.plot([&](double t){
+  //        return traj(t).first;
+  //        }, 200, 0.0, traj.length());
 
-      MatrixX2f ref_points = MatrixX2f::Zero(refs.cols(), 2);
-      for (unsigned int i = 0; i < refs.cols(); ++i) {
-        ref_points.row(i) = traj(time).first.head(2).cast<float>() + refs.col(i).head(2).cast<float>();
-      }
-      plotter.plot_points(ref_points, {1.0, 0.0, 0.0, 1.0});
-    }
-  });
+  //    MatrixX2f ref_points = MatrixX2f::Zero(refs.cols(), 2);
+  //    for (unsigned int i = 0; i < refs.cols(); ++i) {
+  //      ref_points.row(i) = traj(time).first.head(2).cast<float>() + refs.col(i).head(2).cast<float>();
+  //    }
+  //    plotter.plot_points(ref_points, {1.0, 0.0, 0.0, 1.0});
+  //  }
+  //});
   
 }

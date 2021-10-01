@@ -68,26 +68,35 @@ namespace cannon {
             return state_;
           }
           
-          virtual MatrixXd sample_grid_refs(int rows, int cols) const override {
-            MatrixXd refs(3, rows * cols);
+          virtual MatrixXd sample_grid_refs(std::vector<int> grid_sizes) const override {
+            grid_sizes.resize(3, 1);
 
-            VectorXd xs = VectorXd::LinSpaced(cols,
-                state_space_->getBounds().low[0],
-                state_space_->getBounds().high[0]);
-            VectorXd ys = VectorXd::LinSpaced(rows,
-                state_space_->getBounds().low[1],
-                state_space_->getBounds().high[1]);
-
-            for (int i = 0; i < rows; i++) {
-              for (int j = 0; j < cols; j++) {
-                int idx = (i * cols) + j;
-                refs(0, idx) = xs[j];
-                refs(1, idx) = ys[i];
-                refs(2, idx) = 0.0;
-              }
+            int total_refs = 1;
+            for (unsigned int i = 0; i < 2; ++i) {
+              total_refs *= grid_sizes[i]; 
             }
 
-            // TODO Also sample theta dimension?
+            MatrixXd refs(3, total_refs);
+            VectorXd xs = VectorXd::LinSpaced(grid_sizes[0],
+                state_space_->getBounds().low[0],
+                state_space_->getBounds().high[0]);
+            VectorXd ys = VectorXd::LinSpaced(grid_sizes[1],
+                state_space_->getBounds().low[1],
+                state_space_->getBounds().high[1]);
+            VectorXd ths = VectorXd::LinSpaced(grid_sizes[2], -M_PI, M_PI);
+
+            unsigned int idx = 0;
+            for (int i = 0; i < grid_sizes[0]; i++) {
+              for (int j = 0; j < grid_sizes[1]; j++) {
+                for (int k = 0; k < grid_sizes[2]; k++) {
+                  refs(0, idx) = xs[i];
+                  refs(1, idx) = ys[j];
+                  refs(2, idx) = ths[k];
+
+                  ++idx;
+                }
+              }
+            }
 
             return refs;
           }
