@@ -16,6 +16,9 @@ using namespace cannon::research::parl;
 using namespace cannon::plot;
 
 int main() {
+  log_info("Using", nbThreads(), "Eigen threads");
+
+
   Hyperparams params;
 
   auto env = std::make_shared<InvertedPendulumEnvironment>();

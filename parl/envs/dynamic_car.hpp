@@ -88,19 +88,19 @@ namespace cannon {
             MatrixXd refs(5, rows * cols);
 
             VectorXd xs = VectorXd::LinSpaced(cols,
-                state_space_->getSubspace(1)->as<ob::RealVectorStateSpace>()->getBounds().low[0],
-                state_space_->getSubspace(1)->as<ob::RealVectorStateSpace>()->getBounds().high[0]);
+                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().low[0],
+                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().high[0]);
             VectorXd ys = VectorXd::LinSpaced(rows,
-                state_space_->getSubspace(1)->as<ob::RealVectorStateSpace>()->getBounds().low[1],
-                state_space_->getSubspace(1)->as<ob::RealVectorStateSpace>()->getBounds().high[1]);
+                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().low[1],
+                state_space_->getSubspace(0)->as<ob::SE2StateSpace>()->getBounds().high[1]);
 
             for (int i = 0; i < rows; i++) {
               for (int j = 0; j < cols; j++) {
                 int idx = (i * cols) + j;
-                refs(0, idx) = 0.0;
-                refs(1, idx) = 0.0;
-                refs(2, idx) = xs[i];
-                refs(3, idx) = ys[i];
+                refs(0, idx) = xs[j];
+                refs(1, idx) = ys[i];
+                refs(2, idx) = 0.0;
+                refs(3, idx) = 0.0;
                 refs(4, idx) = 0.0;
               }
             }

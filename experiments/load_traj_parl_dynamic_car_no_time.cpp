@@ -65,78 +65,12 @@ std::vector<double> get_ref_point_times(double length, unsigned int num_refs) {
   return points;
 }
 
-MatrixXd make_error_system_refs(double length, unsigned int num_refs=100) {
-  auto times = get_ref_point_times(length, num_refs);
-
-  // Since this is the error system, all dimensions except for time should be
-  // zero
-  MatrixXd refs = MatrixXd::Zero(6, times.size());
-  for (unsigned int i = 0; i < times.size(); i++) {
-    refs(5, i) = times[i];
-  }
-
-  return refs;
-}
-
-MatrixXd make_error_system_value_refs(const ControlledTrajectory& traj, unsigned int num_refs=100) {
-  auto times = get_ref_point_times(traj.length(), num_refs);
-
-  auto spline = traj.state_traj().interp();
-
-  //Trajectory traj_2d;
-  //for (unsigned int i = 0; i < times.size(); ++i) {
-  //  VectorXd s = VectorXd::Zero(2);
-  //  s = spline(times[i]).head(2);
-  //  traj_2d.push_back(s, times[i]);
-  //}
-  //auto spline_2d = traj_2d.interp();
-
-  // Since this is the error system, all dimensions except for time should be
-  // zero
-  //
-  // TODO Right now this is just hard coded along normal vector -- is there a better way to decide how to place refs around trajectory?
-  MatrixXd refs = MatrixXd::Zero(6, 3*times.size());
-  for (unsigned int i = 0; i < times.size(); i++) {
-    refs(5, 3*i) = times[i];
-
-    VectorXd value_ref_pos = VectorXd::Zero(6);
-    value_ref_pos.head(5) = spline.normal(times[i]);
-    value_ref_pos[5] = times[i];
-    refs.col(3*i + 1) = value_ref_pos;
-
-    VectorXd value_ref_neg = VectorXd::Zero(6);
-    value_ref_neg.head(5) = -spline.normal(times[i]);
-    value_ref_neg[5] = times[i];
-    refs.col(3*i + 2) = value_ref_neg;
-  }
-
-  return refs;
-}
-
-std::shared_ptr<ob::StateSpace>
-make_error_state_space(std::shared_ptr<Environment> env, double duration) {
-  auto time_space = std::make_shared<ob::RealVectorStateSpace>(1);
-  ob::RealVectorBounds b(1);
-  b.setLow(0.0);
-  b.setHigh(duration + 1.0);
-  time_space->setBounds(b);
-  time_space->setup();
-
-  auto cspace = std::make_shared<ob::CompoundStateSpace>();
-  cspace->addSubspace(env->get_state_space(), 1.0);
-  cspace->addSubspace(time_space, 1.0);
-  cspace->setup();
-
-  return cspace;
-}
-
-VectorXd compute_error_state(const VectorXd& ref, const VectorXd& actual, double time) {
+VectorXd compute_error_state(const VectorXd& ref, const VectorXd& actual) {
   assert(ref.size() == actual.size());
 
   VectorXd diff = ref - actual;
-  VectorXd ret = VectorXd::Zero(ref.size() + 1);
+  VectorXd ret = VectorXd::Zero(ref.size());
   ret.head(ref.size()) = diff;
-  ret[ref.size()] = time;
 
   return ret;
 }
@@ -161,7 +95,7 @@ execute_parl_pid_traj(const ControlledTrajectory &traj,
 
     // Compute PARL action
     auto plan_state = traj(time).first;
-    auto error_state = compute_error_state(plan_state, state, time);
+    auto error_state = compute_error_state(plan_state, state);
     auto parl_action = parl->get_action(error_state);
 
     auto combined_action = parl_action + pid_action;
@@ -175,13 +109,13 @@ execute_parl_pid_traj(const ControlledTrajectory &traj,
 
     auto traj_state = traj(time).first;
 
-    double tracking_reward = -((state.head(2) - plan_state.head(2)).norm()) - parl_action.norm();
+    double tracking_reward = -((state.head(2) - plan_state.head(2)).norm()) - 0.2*parl_action.norm();
 
     total_reward += tracking_reward;
 
     // Train PARL
     auto new_plan_state = traj(time).first;
-    auto new_error_state = compute_error_state(new_plan_state, state, time);
+    auto new_error_state = compute_error_state(new_plan_state, state);
     parl->process_datum(error_state, parl_action, tracking_reward, new_error_state);
     states.push_back(error_state);
   }
@@ -207,24 +141,10 @@ int main() {
   params.load_config("/home/cannon/Documents/cannon/cannon/research/"
                      "experiments/parl_configs/r10c10_dc.yaml");
 
-  MatrixXd refs = make_error_system_refs(traj.length(), 20);
-  MatrixX2f ref_points = MatrixX2f::Zero(refs.cols(), 2);
-  for (unsigned int i = 0; i < refs.cols(); ++i) {
-    VectorXd traj_pt = traj(refs(5, i)).first;
-    ref_points.row(i) = traj_pt.head(2).cast<float>();
-  }
+  MatrixXd refs = env->sample_grid_refs(5, 5) * 0.1;
 
-  MatrixXd value_refs = make_error_system_value_refs(traj, 20);
-  MatrixX2f value_ref_points = MatrixX2f::Zero(value_refs.cols(), 2);
-  for (unsigned int i = 0; i < value_refs.cols(); ++i) {
-    VectorXd traj_pt = traj(value_refs(5, i)).first;
-    VectorXd ref_pt = traj_pt + value_refs.col(i).head(5);
-    value_ref_points.row(i) = ref_pt.head(2).cast<float>();
-  }
-
-  auto parl =
-      std::make_shared<Parl>(make_error_state_space(env, traj.length()),
-                             env->get_action_space(), refs, value_refs, params);
+  auto parl = std::make_shared<Parl>(env->get_state_space(),
+                                     env->get_action_space(), refs, params);
 
   DynamicCarEnvironment model_env;
   VectorXd plan_start(5);
@@ -292,17 +212,23 @@ int main() {
 
     if (changed) {
       plotter.clear();
+
+      auto plan_state = traj(time).first;
       plotter.plot([&](const Vector2d &p) {
         VectorXd full_p = VectorXd::Zero(5);
         full_p.head(2) = p;
-        auto plan_state = traj(time).first;
         full_p.tail(3) = plan_state.tail(3);
-        return parl->predict_value(compute_error_state(plan_state, full_p, time));
-      }, 15, -2.0, 2.0, -2.0, 2.0);
+        return parl->predict_value(compute_error_state(plan_state, full_p));
+      }, 15, plan_state[0] - 0.4, plan_state[0] + 0.4, plan_state[1] - 0.4, plan_state[1] + 0.4);
       plotter.plot([&](double t){
           return traj(t).first;
           }, 200, 0.0, traj.length());
-      plotter.plot_points(value_ref_points, {1.0, 0.0, 0.0, 1.0});
+
+      MatrixX2f ref_points = MatrixX2f::Zero(refs.cols(), 2);
+      for (unsigned int i = 0; i < refs.cols(); ++i) {
+        ref_points.row(i) = traj(time).first.head(2).cast<float>() + refs.col(i).head(2).cast<float>();
+      }
+      plotter.plot_points(ref_points, {1.0, 0.0, 0.0, 1.0});
     }
   });
   
