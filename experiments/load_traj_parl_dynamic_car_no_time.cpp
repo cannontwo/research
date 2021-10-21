@@ -5,12 +5,26 @@
 #include <cannon/geom/trajectory.hpp>
 #include <cannon/plot/plotter.hpp>
 #include <cannon/research/parl/parl.hpp>
+#include <cannon/utils/experiment_runner.hpp>
+#include <cannon/utils/experiment_writer.hpp>
+
+#include <thirdparty/HighFive/include/highfive/H5Easy.hpp>
 
 using namespace cannon::research::parl;
 using namespace cannon::control;
 using namespace cannon::math;
 using namespace cannon::geom;
 using namespace cannon::plot;
+using namespace cannon::utils;
+
+/*!
+ * \brief Struct containing parameters to be varied in experiments
+ */
+struct ExpParams {
+  double l; //!< Environment axle length param
+  double ref_radius; //!< PARL ref radius
+  std::vector<int> ref_grid_sizes; //!< PARL ref grid sizes
+};
 
 unsigned int node_id(unsigned int cols, unsigned int i, unsigned int j) {
   return j * cols + i;
@@ -75,11 +89,41 @@ VectorXd compute_error_state(const VectorXd& ref, const VectorXd& actual) {
   return ret;
 }
 
+std::vector<Vector2d> execute_traj(const ControlledTrajectory &traj,
+                                   std::shared_ptr<DynamicCarEnvironment> env) {
+
+  double time = 0.0;
+  VectorXd state = env->reset(VectorXd::Zero(5));
+  //env->render();
+  std::vector<Vector2d> executed;
+
+  for (unsigned int i = 0; i < (1.0/env->get_time_step()) * traj.length(); ++i) {
+    std::cout << "\r" << "On step " << i << std::flush;
+    executed.push_back(state.head(2));
+
+    VectorXd pid_action = traj(time).second;
+
+    // Compute PARL action
+    auto plan_state = traj(time).first;
+
+    double reward;
+    bool done;
+    std::tie(state, reward, done) = env->step(pid_action);
+    //env->render();
+    
+    time += env->get_time_step();
+  }
+
+  executed.push_back(state.head(2));
+  return executed;
+}
+
 std::pair<std::vector<Vector2d>, double>
 execute_parl_pid_traj(const ControlledTrajectory &traj,
                       std::shared_ptr<Parl> parl,
                       std::shared_ptr<DynamicCarEnvironment> env,
-                      bool do_controller_update) {
+                      bool do_controller_update,
+                      bool testing=false) {
 
   double time = 0.0;
   VectorXd state = env->reset(VectorXd::Zero(5));
@@ -96,7 +140,7 @@ execute_parl_pid_traj(const ControlledTrajectory &traj,
     // Compute PARL action
     auto plan_state = traj(time).first;
     auto error_state = compute_error_state(plan_state, state);
-    auto parl_action = parl->get_action(error_state);
+    auto parl_action = parl->get_action(error_state, testing);
 
     auto combined_action = parl_action + pid_action;
 
@@ -134,9 +178,23 @@ execute_parl_pid_traj(const ControlledTrajectory &traj,
   return std::make_pair(executed, total_reward);
 }
 
-int main() {
+void run_exp(ExperimentWriter &w, int seed, const ExpParams& experiment_params) {
+  assert(!(render_interactive && render_value));
+
+  w.start_log("train_rewards");
+  w.write_line("train_rewards", "episode,reward");
+
+  w.start_log("train_distances");
+  w.write_line("train_distances", "episode,distance");
+
+  w.start_log("test_reward");
+  w.write_line("test_reward", "reward");
+
+  w.start_log("test_distance");
+  w.write_line("test_distance", "distance");
+
   auto env = std::make_shared<DynamicCarEnvironment>(VectorXd::Zero(5),
-                                                     VectorXd::Ones(5), 0.9);
+                                                     VectorXd::Ones(5), experiment_params.l);
 
   ControlledTrajectory traj;
   traj.load("logs/sst_dynamic_car_plan.h5");
@@ -145,35 +203,48 @@ int main() {
   params.load_config("/home/cannon/Documents/cannon/cannon/research/"
                      "experiments/parl_configs/r10c10_dc.yaml");
 
-  MatrixXd refs = env->sample_grid_refs({2, 2, 5, 1, 1}) * 0.1;
+  MatrixXd refs = env->sample_grid_refs(experiment_params.ref_grid_sizes) * experiment_params.ref_radius;
 
   auto parl = std::make_shared<Parl>(env->get_state_space(),
                                      env->get_action_space(), refs, params);
 
-  std::vector<Vector2d> parl_pts;
-  int cached_traj_num = -1;
-  std::thread plot_thread([&]() {
-    Plotter plotter;
+  auto real_pts = execute_traj(traj, env);
+  H5Easy::File no_parl_traj_file(w.get_dir() + "/no_parl_traj.h5", H5Easy::File::Overwrite);
+  std::string states_path("/states/");
+  for (unsigned int i = 0; i < real_pts.size(); ++i) {
+    H5Easy::dump(no_parl_traj_file, states_path + std::to_string(i), real_pts[i]);
+  }
+  log_info("On real system, point-to-point path execution error is", compute_traj_error(traj, real_pts));
 
-    plotter.render([&]() {
-      static int traj_num = cached_traj_num;
+  //std::vector<Vector2d> parl_pts;
+  //int cached_traj_num = -1;
+  //std::thread plot_thread;
+  //if (render_interactive) {
+  //  plot_thread = std::thread([&]() {
+  //    Plotter plotter;
 
-      if (traj_num != cached_traj_num) {
-        plotter.clear();
-        plotter.plot([&](double t){return traj(t).first;}, 200, 0.0, traj.length());
-        plotter.plot(parl_pts);
+  //    plotter.render([&]() {
+  //      static int traj_num = cached_traj_num;
 
-        traj_num = cached_traj_num;
-      }
-    });
+  //      if (traj_num != cached_traj_num) {
+  //        plotter.clear();
+  //        plotter.plot([&](double t){return traj(t).first;}, 200, 0.0, traj.length());
+  //        plotter.plot(real_pts);
+  //        plotter.plot(parl_pts);
 
-  });
+  //        traj_num = cached_traj_num;
+  //      }
+  //    });
+
+  //  });
+  //}
+
 
   // Doing initial learning
   for (unsigned int i = 0; i < 100; ++i) {
-    auto [new_parl_pts, total_reward] = execute_parl_pid_traj(traj, parl, env, false);
-    parl_pts = new_parl_pts;
-    cached_traj_num = i;
+    auto [parl_pts, total_reward] = execute_parl_pid_traj(traj, parl, env, false);
+    //parl_pts = new_parl_pts;
+    //cached_traj_num = i;
     auto parl_path_error = compute_traj_error(traj, parl_pts);
     log_info("Initial training (run", i, "), point-to-point path execution error was", parl_path_error);
     log_info("Initial training (run", i, "), average path execution error was", parl_path_error / parl_pts.size());
@@ -182,53 +253,101 @@ int main() {
 
   // Use PARL to augment control, compute error in same way
   for (unsigned int i = 0; i < 100; ++i) {
-    auto [new_parl_pts, total_reward] = execute_parl_pid_traj(traj, parl, env, true);
-    parl_pts = new_parl_pts;
-    cached_traj_num = i;
+    auto [parl_pts, total_reward] = execute_parl_pid_traj(traj, parl, env, true);
+    //parl_pts = new_parl_pts;
+    //cached_traj_num = i;
     auto parl_path_error = compute_traj_error(traj, parl_pts);
     log_info("With PARL (run", i, "), point-to-point path execution error was", parl_path_error);
     log_info("With PARL (run", i, "), average path execution error was", parl_path_error / parl_pts.size());
     log_info("With PARL (run", i, "), had trajectory tracking reward", total_reward);
 
+    // Write to file
+    std::stringstream ss;
+    ss << i << "," << total_reward;
+    w.write_line("train_rewards", ss.str());
+
+    ss.clear();
+    ss.str("");
+    ss << i << "," << parl_path_error;
+    w.write_line("train_distances", ss.str());
   } 
 
-  plot_thread.join();
+  // Testing
+  auto [parl_pts, total_reward] = execute_parl_pid_traj(traj, parl, env, false, true);
+  H5Easy::File final_traj_file(w.get_dir() + "/final_traj.h5", H5Easy::File::Overwrite);
+  for (unsigned int i = 0; i < parl_pts.size(); ++i) {
+    H5Easy::dump(final_traj_file, states_path + std::to_string(i), parl_pts[i]);
+  }
+
+  //parl_pts = new_parl_pts;
+  auto parl_path_error = compute_traj_error(traj, parl_pts);
+  log_info("Testing mode point-to-point path execution error was", parl_path_error);
+  log_info("Testing mode average path execution error was", parl_path_error / parl_pts.size());
+  log_info("Testing mode had trajectory tracking reward", total_reward);
+
+  std::stringstream ss;
+  ss << total_reward;
+  w.write_line("test_reward", ss.str());
+
+  ss.clear();
+  ss.str("");
+  ss << parl_path_error;
+  w.write_line("test_distance", ss.str());
+
+  //if (render_interactive) {
+  //  plot_thread.join();
+  //}
   
   // Plotting learned value function
-  //Plotter plotter;
-  //plotter.render([&]() {
-  //  static float time = 0.0;
+  //if (render_value) {
+  //  Plotter plotter;
+  //  plotter.render([&]() {
+  //    static float time = 0.0;
 
-  //  bool changed = false;
-  //  if (ImGui::BeginMainMenuBar()) {
-  //    if (ImGui::BeginMenu("Reward Plotting")) {
-  //      changed = changed || ImGui::SliderFloat("Traj time", &time, 0.0, traj.length());
+  //    bool changed = false;
+  //    if (ImGui::BeginMainMenuBar()) {
+  //      if (ImGui::BeginMenu("Reward Plotting")) {
+  //        changed = changed || ImGui::SliderFloat("Traj time", &time, 0.0, traj.length());
 
-  //      ImGui::EndMenu();
+  //        ImGui::EndMenu();
+  //      }
+  //      ImGui::EndMainMenuBar();
   //    }
-  //    ImGui::EndMainMenuBar();
-  //  }
 
-  //  if (changed) {
-  //    plotter.clear();
+  //    if (changed) {
+  //      plotter.clear();
 
-  //    auto plan_state = traj(time).first;
-  //    plotter.plot([&](const Vector2d &p) {
-  //      VectorXd full_p = VectorXd::Zero(5);
-  //      full_p.head(2) = p;
-  //      full_p.tail(3) = plan_state.tail(3);
-  //      return parl->predict_value(compute_error_state(plan_state, full_p));
-  //    }, 15, plan_state[0] - 0.4, plan_state[0] + 0.4, plan_state[1] - 0.4, plan_state[1] + 0.4);
-  //    plotter.plot([&](double t){
-  //        return traj(t).first;
-  //        }, 200, 0.0, traj.length());
+  //      auto plan_state = traj(time).first;
+  //      plotter.plot([&](const Vector2d &p) {
+  //        VectorXd full_p = VectorXd::Zero(5);
+  //        full_p.head(2) = p;
+  //        full_p.tail(3) = plan_state.tail(3);
+  //        return parl->predict_value(compute_error_state(plan_state, full_p));
+  //      }, 15, plan_state[0] - 0.4, plan_state[0] + 0.4, plan_state[1] - 0.4, plan_state[1] + 0.4);
+  //      plotter.plot([&](double t){
+  //          return traj(t).first;
+  //          }, 200, 0.0, traj.length());
 
-  //    MatrixX2f ref_points = MatrixX2f::Zero(refs.cols(), 2);
-  //    for (unsigned int i = 0; i < refs.cols(); ++i) {
-  //      ref_points.row(i) = traj(time).first.head(2).cast<float>() + refs.col(i).head(2).cast<float>();
+  //      MatrixX2f ref_points = MatrixX2f::Zero(refs.cols(), 2);
+  //      for (unsigned int i = 0; i < refs.cols(); ++i) {
+  //        ref_points.row(i) = traj(time).first.head(2).cast<float>() + refs.col(i).head(2).cast<float>();
+  //      }
+  //      plotter.plot_points(ref_points, {1.0, 0.0, 0.0, 1.0});
   //    }
-  //    plotter.plot_points(ref_points, {1.0, 0.0, 0.0, 1.0});
-  //  }
-  //});
+  //  });
+  //}
   
+}
+
+int main() {
+  ExperimentRunner runner("logs/parl_planning_nt_large_axle", 10,
+                          [](ExperimentWriter &w, int seed) {
+                            auto f = w.get_file("seed.txt");
+                            f << seed;
+                            f.close();
+
+                            run_exp(w, seed, {1.3, 0.1, {5, 5, 1, 1, 1}});
+                          });
+
+  runner.run();
 }
